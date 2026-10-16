@@ -1,0 +1,74 @@
+/* Requests & Procurement module (Member 4). All classes prefixed rq- to avoid clashes. */
+.rq-page { display: grid; gap: 16px; max-width: 860px; }
+.rq-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rq-header h2 { margin: 0; font-size: 1.4rem; color: #0f172a; }
+.rq-section-title { margin: 12px 0 0; font-size: 1.05rem; color: #334155; }
+
+.rq-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
+.rq-card__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rq-card h3 { margin: 0; font-size: 1.05rem; color: #0f172a; }
+.rq-meta { margin: 4px 0 0; color: #64748b; font-size: 0.9rem; }
+.rq-reason { margin: 10px 0 0; color: #334155; }
+.rq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.rq-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+.rq-form { display: grid; gap: 14px; }
+.rq-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.rq-field { display: grid; gap: 6px; }
+.rq-label { font-weight: 600; font-size: 0.9rem; color: #334155; }
+.rq-field input, .rq-field select, .rq-field textarea {
+  font: inherit; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; width: 100%; box-sizing: border-box;
+}
+.rq-field input:focus, .rq-field select:focus, .rq-field textarea:focus { outline: 2px solid #93c5fd; border-color: #3b82f6; }
+.rq-error { color: #b91c1c; }
+.rq-hint { color: #64748b; }
+
+.rq-segment { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; width: fit-content; }
+.rq-segment button { font: inherit; border: 0; background: #fff; padding: 8px 16px; cursor: pointer; color: #334155; }
+.rq-segment button + button { border-left: 1px solid #cbd5e1; }
+.rq-segment button.is-active { background: #1d4ed8; color: #fff; }
+
+.rq-availability { margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 0.92rem; }
+.rq-availability.is-available { background: #ecfdf5; color: #065f46; }
+.rq-availability.is-unavailable { background: #fffbeb; color: #92400e; }
+
+.rq-btn {
+  font: inherit; font-weight: 600; border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff;
+  padding: 9px 16px; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block;
+}
+.rq-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.rq-btn--ghost { background: #fff; color: #1d4ed8; }
+.rq-link { font: inherit; background: none; border: 0; color: #1d4ed8; padding: 0; margin-top: 10px; cursor: pointer; }
+
+.rq-banner { padding: 12px 14px; border-radius: 8px; }
+.rq-banner a { color: inherit; font-weight: 600; }
+.rq-banner--ok { background: #ecfdf5; color: #065f46; }
+.rq-banner--warn { background: #fffbeb; color: #92400e; }
+.rq-banner--error { background: #fef2f2; color: #991b1b; }
+
+.rq-state { padding: 24px; text-align: center; color: #64748b; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; }
+.rq-state p { margin: 0 0 12px; }
+.rq-state--error { color: #991b1b; background: #fef2f2; border-color: #fca5a5; }
+
+.rq-pill { font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; background: #f1f5f9; color: #334155; }
+.rq-pill--pending, .rq-pill--pending_approval { background: #eff6ff; color: #1d4ed8; }
+.rq-pill--issued, .rq-pill--approved { background: #ecfdf5; color: #065f46; }
+.rq-pill--declined, .rq-pill--rejected { background: #fef2f2; color: #991b1b; }
+.rq-pill--procurement, .rq-pill--draft { background: #fffbeb; color: #92400e; }
+
+.rq-timeline { list-style: none; margin: 12px 0 0; padding: 0 0 0 6px; border-left: 2px solid #e2e8f0; }
+.rq-timeline__item { position: relative; display: flex; gap: 10px; padding: 0 0 14px 14px; }
+.rq-timeline__item p { margin: 2px 0; color: #334155; }
+.rq-timeline__item small { color: #64748b; }
+.rq-timeline__dot { position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #94a3b8; }
+.rq-timeline__item--issued .rq-timeline__dot, .rq-timeline__item--approved .rq-timeline__dot { background: #10b981; }
+.rq-timeline__item--declined .rq-timeline__dot, .rq-timeline__item--rejected .rq-timeline__dot { background: #ef4444; }
+.rq-timeline__item--procurement .rq-timeline__dot, .rq-timeline__item--draft .rq-timeline__dot { background: #f59e0b; }
+.rq-timeline__item--pending .rq-timeline__dot, .rq-timeline__item--pending_approval .rq-timeline__dot { background: #3b82f6; }
+
+@media (max-width: 640px) {
+  .rq-row { grid-template-columns: 1fr; }
+  .rq-card__top { flex-direction: column; }
+  .rq-segment { width: 100%; }
+  .rq-segment button { flex: 1; }
+}

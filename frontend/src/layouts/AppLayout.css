@@ -1,0 +1,142 @@
+:root {
+    font-family: 'Avenir Next', 'Segoe UI', sans-serif;
+    color: #20342d;
+    background: #f5f8f4;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+}
+
+a {
+    color: inherit;
+}
+
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+    flex-direction: column;
+}
+
+.app-header {
+    background: #fff;
+    border-bottom: 1px solid #dbe4dd;
+    min-height: 88px;
+}
+
+.header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 32px;
+    min-height: 88px;
+}
+
+.brand {
+    display: inline-block;
+    padding: 0;
+    color: #146b54;
+    font-size: 28px;
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.primary-nav {
+    display: flex;
+    gap: 28px;
+    overflow-x: auto;
+    align-items: center;
+    scrollbar-width: thin;
+}
+
+.nav-item {
+    flex: 0 0 auto;
+    padding: 18px 0 20px;
+    border-bottom: 4px solid transparent;
+    color: #53665e;
+    font-size: 16px;
+    text-decoration: none;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.nav-item:hover {
+    color: #146b54;
+}
+
+.nav-item-current {
+    border-bottom-color: #2563eb;
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.nav-item:hover {
+    color: #2563eb;
+}
+
+.page-content {
+    width: min(100% - 64px, 1376px);
+    flex: 1;
+    margin: 0 auto;
+    padding: 48px 0;
+}
+
+.page-eyebrow {
+    margin: 0 0 8px;
+    color: #63766c;
+    font-size: 13px;
+}
+
+.page-content h1 {
+    margin: 0;
+    color: #20342d;
+    font-family: Georgia, serif;
+    font-size: 34px;
+    font-weight: 500;
+}
+
+.app-footer {
+    border-top: 1px solid #dbe4dd;
+    background: #fff;
+    color: #63766c;
+    font-size: 13px;
+}
+
+.footer-inner {
+    display: flex;
+    max-width: 1440px;
+    justify-content: space-between;
+    margin: 0 auto;
+    padding: 18px 32px;
+}
+
+@media (max-width: 640px) {
+    .header-inner {
+        padding: 0 18px;
+    }
+
+    .primary-nav {
+        gap: 20px;
+    }
+
+    .page-content {
+        width: calc(100% - 36px);
+        padding: 34px 0;
+    }
+
+    .footer-inner {
+        padding: 16px 18px;
+    }
+}

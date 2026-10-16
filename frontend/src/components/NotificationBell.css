@@ -1,0 +1,8 @@
+.bell { position: relative; display: inline-flex; padding: 0.4rem; text-decoration: none; font-size: 1.25rem; }
+.bell:focus-visible { outline: 2px solid #1a5fb4; outline-offset: 2px; }
+.bell-badge {
+  position: absolute; top: 0; right: 0;
+  min-width: 1.1rem; padding: 0 0.3rem;
+  border-radius: 999px; background: #c01c28; color: #fff;
+  font-size: 0.7rem; line-height: 1.1rem; text-align: center;
+}
