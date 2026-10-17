@@ -156,6 +156,9 @@ def update_account(admin_user_id, user_id, updates, *, database_url=None):
         if account is None:
             return None
 
+        if account["role"] == "admin" and changes.get("role", "admin") != "admin":
+            raise ValueError("Admin account roles cannot be changed.")
+
         if account["role"] == "admin" and account["is_active"]:
             next_role = changes.get("role", account["role"])
             next_active = changes.get("is_active", account["is_active"])

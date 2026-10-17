@@ -13,6 +13,10 @@ export default function AdminUsersPage() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ username: "", email: "", password: "", role: "staff" });
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [editForm, setEditForm] = useState({ username: "", email: "", password: "", role: "staff" });
+  const [editError, setEditError] = useState("");
+  const [updating, setUpdating] = useState(false);
 
   async function loadUsers() {
     setLoading(true);
@@ -54,6 +58,46 @@ export default function AdminUsersPage() {
       await loadUsers();
     } catch (updateError) {
       setError(updateError.message || "Could not update account.");
+    }
+  }
+
+  function startEditing(member) {
+    setEditingUserId(member.id);
+    setEditForm({
+      username: member.name,
+      email: member.email,
+      password: "",
+      role: member.role,
+    });
+    setEditError("");
+  }
+
+  function cancelEditing() {
+    setEditingUserId(null);
+    setEditError("");
+    setEditForm({ username: "", email: "", password: "", role: "staff" });
+  }
+
+  async function handleUpdate(event) {
+    event.preventDefault();
+    setUpdating(true);
+    setEditError("");
+    const changes = {
+      username: editForm.username,
+      email: editForm.email,
+    };
+    const editingMember = users.find((member) => member.id === editingUserId);
+    if (editingMember?.role !== "admin") changes.role = editForm.role;
+    if (editForm.password) changes.password = editForm.password;
+
+    try {
+      await updateUser(editingUserId, changes);
+      cancelEditing();
+      await loadUsers();
+    } catch (updateError) {
+      setEditError(updateError.message || "Could not update account.");
+    } finally {
+      setUpdating(false);
     }
   }
 
@@ -106,10 +150,79 @@ export default function AdminUsersPage() {
                 {member.id === user.id ? "Signed-in user" : "Account"}
               </span>
             </div>
-            {member.id !== user.id && (
-              <button type="button" onClick={() => toggleActive(member)}>
-                {member.active ? "Deactivate" : "Reactivate"}
-              </button>
+            {editingUserId !== null && editingUserId === member.id ? (
+              <form
+                onSubmit={handleUpdate}
+                style={{ display: "grid", gap: 12, maxWidth: 560, marginTop: 16 }}
+              >
+                <label>
+                  Username
+                  <input
+                    required
+                    minLength={3}
+                    maxLength={64}
+                    value={editForm.username}
+                    onChange={(event) => setEditForm({ ...editForm, username: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Email
+                  <input
+                    required
+                    type="email"
+                    value={editForm.email}
+                    onChange={(event) => setEditForm({ ...editForm, email: event.target.value })}
+                  />
+                </label>
+                <label>
+                  New password
+                  <input
+                    type="password"
+                    minLength={6}
+                    autoComplete="new-password"
+                    value={editForm.password}
+                    onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
+                    placeholder="Leave blank to keep the current password"
+                  />
+                </label>
+                <label>
+                  Role
+                  <select
+                    value={editForm.role}
+                    disabled={member.role === "admin"}
+                    onChange={(event) => setEditForm({ ...editForm, role: event.target.value })}
+                  >
+                    {ROLE_DEFINITIONS.map((role) => (
+                      <option key={role.key} value={role.key}>{role.label}</option>
+                    ))}
+                  </select>
+                </label>
+                {member.role === "admin" && (
+                  <p style={{ margin: "-6px 0 0", color: "#475569" }}>
+                    Admin account roles cannot be changed.
+                  </p>
+                )}
+                {editError && <p role="alert" style={{ color: "#b91c1c", margin: 0 }}>{editError}</p>}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="submit" disabled={updating}>
+                    {updating ? "Saving..." : "Save changes"}
+                  </button>
+                  <button type="button" disabled={updating} onClick={cancelEditing}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => startEditing(member)}>
+                  Edit account
+                </button>
+                {member.id !== user.id && (
+                  <button type="button" onClick={() => toggleActive(member)}>
+                    {member.active ? "Deactivate" : "Reactivate"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ))}
