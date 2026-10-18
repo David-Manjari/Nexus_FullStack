@@ -1,0 +1,369 @@
+.projects-page {
+  display: grid;
+  gap: 24px;
+}
+
+.projects-page h1,
+.projects-page h2,
+.projects-page h3,
+.projects-page h4,
+.dashboard-projects h2 {
+  margin: 0;
+}
+
+.project-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-page-header button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #17836d;
+  border-radius: 4px;
+  background: #17836d;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-page-header button:hover {
+  background: #126b59;
+}
+
+.project-page-header button:focus-visible {
+  outline: 2px solid #1a5fb4;
+  outline-offset: 2px;
+}
+
+.project-create-form,
+.project-form {
+  display: grid;
+  gap: 12px;
+  max-width: 680px;
+}
+
+.project-create-form {
+  padding-bottom: 20px;
+  border-bottom: 1px solid #d7dee5;
+}
+
+.project-create-form label,
+.project-form label,
+.milestone-item label {
+  display: grid;
+  gap: 5px;
+  font-weight: 600;
+}
+
+.project-create-form input,
+.project-create-form textarea,
+.project-form input,
+.project-form textarea,
+.project-form select,
+.milestone-item select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #9aa8b5;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.project-create-form textarea,
+.project-form textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.project-create-approval {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #c7d0d9;
+  border-radius: 4px;
+  background: #f7f9fa;
+}
+
+.project-create-approval__toggle {
+  display: flex !important;
+  align-items: center;
+  gap: 9px !important;
+  cursor: pointer;
+}
+
+.project-create-approval__toggle input {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.project-create-approval .project-form {
+  max-width: none;
+}
+
+.project-create-approval button {
+  width: fit-content;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #17836d;
+  border-radius: 4px;
+  background: #17836d;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-create-approval button:hover:not(:disabled) {
+  background: #126b59;
+}
+
+.project-create-approval button:focus-visible {
+  outline: 2px solid #1a5fb4;
+  outline-offset: 2px;
+}
+
+.project-create-approval button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.project-date-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.projects-list,
+.milestone-list,
+.project-history,
+.dashboard-projects__list,
+.dashboard-projects__audit {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-item,
+.dashboard-projects__item {
+  border: 1px solid #c7d0d9;
+  background: #fff;
+}
+
+.project-item__summary,
+.dashboard-projects__title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-item__summary {
+  padding: 16px;
+}
+
+.project-item__summary h2 {
+  font-size: 1.1rem;
+}
+
+.project-item__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-actions button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #17836d;
+  border-radius: 4px;
+  background: #17836d;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-actions button:hover:not(:disabled) {
+  background: #126b59;
+}
+
+.project-actions button:focus-visible {
+  outline: 2px solid #1a5fb4;
+  outline-offset: 2px;
+}
+
+.project-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.project-item__details {
+  display: grid;
+  gap: 20px;
+  padding: 16px;
+  border-top: 1px solid #d7dee5;
+  background: #f7f9fa;
+}
+
+.project-section {
+  display: grid;
+  gap: 12px;
+}
+
+.milestone-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border-left: 3px solid #17836d;
+  background: #fff;
+}
+
+.milestone-item p,
+.project-history p {
+  margin: 5px 0;
+}
+
+.milestone-item label {
+  width: min(180px, 100%);
+}
+
+.milestone-status,
+.project-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: #e8edf1;
+  color: #263746;
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+
+.project-status--active,
+.project-status--completed {
+  background: #d8f0e8;
+  color: #135c49;
+}
+
+.project-status--on_hold,
+.project-status--pending_approval {
+  background: #fff0cc;
+  color: #705000;
+}
+
+.project-status--cancelled,
+.project-status--rejected {
+  background: #fbe1dd;
+  color: #85392f;
+}
+
+.project-history {
+  border-left: 2px solid #17836d;
+  padding-left: 14px;
+}
+
+.project-approval-chain {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 24px;
+}
+
+.project-approval-chain li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.project-approval-chain li > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-form--status {
+  border-top: 1px solid #d7dee5;
+  padding-top: 16px;
+}
+
+.dashboard-projects {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.dashboard-projects__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-projects__header h2 {
+  font-size: 1.25rem;
+}
+
+.dashboard-projects__item {
+  padding: 14px;
+}
+
+.dashboard-projects__title {
+  align-items: center;
+}
+
+.dashboard-projects__audit {
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.dashboard-projects__audit li {
+  display: grid;
+  gap: 2px;
+  color: #43515d;
+}
+
+@media (max-width: 600px) {
+  .project-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .project-page-header button {
+    align-self: flex-end;
+  }
+
+  .project-date-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .project-item__summary,
+  .milestone-item {
+    flex-direction: column;
+  }
+
+  .dashboard-projects__title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
