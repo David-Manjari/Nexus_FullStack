@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 
 import { getUnreadCount } from "./api/notifications";
+import { getProjects } from "./api/projects";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import RoleGuard from "./auth/RoleGuard";
@@ -46,6 +47,9 @@ function getActivePage(pathname) {
 function DashboardHome() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsError, setProjectsError] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -66,6 +70,25 @@ function DashboardHome() {
       active = false;
     };
   }, [user]);
+
+  useEffect(() => {
+    let active = true;
+
+    getProjects()
+      .then((data) => {
+        if (active) setProjects(data);
+      })
+      .catch((loadError) => {
+        if (active) setProjectsError(loadError.message || "Could not load project status.");
+      })
+      .finally(() => {
+        if (active) setProjectsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div style={{ display: "grid", gap: "16px" }}>
@@ -121,6 +144,51 @@ function DashboardHome() {
       >
         {unreadCount > 0 ? "Click here to view unread notifications" : "Click here to view notifications"}
       </Link>
+
+      <section className="dashboard-projects" aria-labelledby="dashboard-projects-heading">
+        <div className="dashboard-projects__header">
+          <h2 id="dashboard-projects-heading">Project status and audit</h2>
+          <Link to="/projects">Projects</Link>
+        </div>
+        {projectsLoading && <Loading message="Loading project status..." />}
+        {!projectsLoading && projectsError && <p role="alert">{projectsError}</p>}
+        {!projectsLoading && !projectsError && projects.length === 0 && (
+          <p>No projects are assigned or available to you.</p>
+        )}
+        {!projectsLoading && !projectsError && projects.length > 0 && (
+          <ul className="dashboard-projects__list">
+            {projects.map((project) => (
+              <li key={project.id} className="dashboard-projects__item">
+                <div className="dashboard-projects__title">
+                  <strong>{project.name}</strong>
+                  <span className={`project-status project-status--${project.status}`}>
+                    {project.status.replaceAll("_", " ")}
+                  </span>
+                </div>
+                {project.statusAudit.length > 0 ? (
+                  <ol className="dashboard-projects__audit">
+                    {project.statusAudit.map((entry) => (
+                      <li key={entry.id}>
+                        <span>
+                          {entry.fromStatus ? `${entry.fromStatus.replaceAll("_", " ")} to ` : "Created as "}
+                          {entry.toStatus.replaceAll("_", " ")}
+                        </span>
+                        {entry.reason && <span> · {entry.reason}</span>}
+                        <small>
+                          {entry.changedByName ? ` by ${entry.changedByName}` : ""}
+                          {entry.changedAt ? ` · ${new Date(entry.changedAt).toLocaleString()}` : ""}
+                        </small>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>No status changes recorded.</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
