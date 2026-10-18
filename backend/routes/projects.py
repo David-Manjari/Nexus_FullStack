@@ -11,6 +11,11 @@ from ..services.workflow import (
 	submit_project,
 	update_project,
 	update_project_status,
+	list_project_assignable_users,
+	list_project_approvers,
+	update_project_team,
+	add_project_milestone,
+	update_project_milestone,
 )
 
 
@@ -60,6 +65,21 @@ def projects_get(project_id):
 	)
 
 
+@projects_bp.get("/assignable-users")
+@roles_required("admin", "manager")
+def projects_assignable_users():
+	return jsonify(users=list_project_assignable_users()), 200
+
+
+@projects_bp.get("/approvers")
+@roles_required(*PROJECT_ROLES)
+def projects_approvers():
+	return _run(
+		lambda: list_project_approvers(session["user_id"]),
+		success_key="users",
+	)
+
+
 @projects_bp.patch("/<int:project_id>")
 @roles_required(*PROJECT_ROLES)
 def projects_update(project_id):
@@ -68,6 +88,17 @@ def projects_update(project_id):
 			project_id, _payload(), session["user_id"], session["role"]
 		),
 		success_key="project",
+	)
+
+
+@projects_bp.patch("/<int:project_id>/team")
+@roles_required("admin", "manager")
+def projects_update_team(project_id):
+	return _run(
+		lambda: update_project_team(
+			project_id, _payload(), session["user_id"], session["role"]
+		),
+		success_key="team",
 	)
 
 
@@ -86,7 +117,7 @@ def projects_submit(project_id):
 
 
 @projects_bp.patch("/<int:project_id>/status")
-@roles_required("admin", "manager")
+@roles_required(*PROJECT_ROLES)
 def projects_update_status(project_id):
 	data = _payload()
 	return _run(
@@ -98,4 +129,28 @@ def projects_update_status(project_id):
 			data.get("reason"),
 		),
 		success_key="project",
+	)
+
+
+@projects_bp.post("/<int:project_id>/milestones")
+@roles_required(*PROJECT_ROLES)
+def projects_add_milestone(project_id):
+	return _run(
+		lambda: add_project_milestone(
+			project_id, _payload(), session["user_id"], session["role"]
+		),
+		success_key="milestone",
+		status=201,
+	)
+
+
+@projects_bp.patch("/<int:project_id>/milestones/<int:milestone_id>")
+@roles_required(*PROJECT_ROLES)
+def projects_update_milestone(project_id, milestone_id):
+	return _run(
+		lambda: update_project_milestone(
+			project_id, milestone_id, _payload(),
+			session["user_id"], session["role"]
+		),
+		success_key="milestone",
 	)

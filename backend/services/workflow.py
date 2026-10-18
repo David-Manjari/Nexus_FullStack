@@ -17,11 +17,13 @@ PROJECT_FIELDS = {"name", "description", "start_date", "end_date"}
 PROJECT_STATUSES = {
 	"approved", "active", "on_hold", "completed", "cancelled"
 }
+MILESTONE_STATUSES = {"planned", "in_progress", "completed"}
 STATUS_TRANSITIONS = {
 	"approved": {"active", "cancelled"},
 	"active": {"on_hold", "completed", "cancelled"},
 	"on_hold": {"active", "completed", "cancelled"},
 }
+CLOSED_PROJECT_STATUSES = {"completed", "cancelled"}
 
 
 def _parse_date(value, field):
@@ -48,9 +50,21 @@ def _project_for_user(connection, project_id, user_id, role, *, lock=False):
 	).fetchone()
 	if project is None:
 		raise WorkflowError("Project not found.", 404)
-	if project["created_by"] != user_id and role not in ("admin", "manager"):
-		raise WorkflowError("You cannot access this project.", 403)
+	if (project["created_by"] != user_id and project["manager_id"] != user_id
+			and role not in ("admin", "manager")):
+		staff_assignment = connection.execute(
+			'''SELECT 1 FROM "Project_Staff_Assignments"
+			   WHERE project_id = %s AND user_id = %s''',
+			(project_id, user_id),
+		).fetchone()
+		if staff_assignment is None:
+			raise WorkflowError("You cannot access this project.", 403)
 	return project
+
+
+def _ensure_project_open(project):
+	if project["status"] in CLOSED_PROJECT_STATUSES:
+		raise WorkflowError("Completed or cancelled projects cannot be edited.", 409)
 
 
 def _record_status(connection, project_id, from_status, to_status, user_id, reason=None):
@@ -90,14 +104,36 @@ def create_project(data, user_id):
 
 def list_projects(user_id, role):
 	with connect_database() as connection:
-		query = '''SELECT p.*, u.username AS created_by_name
+		query = '''SELECT p.*, creator.username AS created_by_name,
+					  manager.username AS manager_name,
+					  COALESCE((
+						  SELECT json_agg(row_to_json(audit)
+							  ORDER BY audit.changed_at DESC, audit.history_id DESC)
+						  FROM (
+							  SELECT h.history_id, h.from_status, h.to_status,
+									 h.reason, h.changed_by,
+									 changed_by.username AS changed_by_name,
+									 h.changed_at
+							  FROM "Project_Status_History" h
+							  JOIN "Users" changed_by ON changed_by.user_id = h.changed_by
+							  WHERE h.project_id = p.project_id
+							  ORDER BY h.changed_at DESC, h.history_id DESC
+							  LIMIT 5
+						  ) AS audit
+					  ), '[]'::json) AS status_audit
 			   FROM "Projects" p
-			   JOIN "Users" u ON u.user_id = p.created_by
+			   JOIN "Users" creator ON creator.user_id = p.created_by
+			   LEFT JOIN "Users" manager ON manager.user_id = p.manager_id
 			   '''
 		params = ()
 		if role not in ("admin", "manager"):
-			query += " WHERE p.created_by = %s"
-			params = (user_id,)
+			query += ''' WHERE p.created_by = %s OR p.manager_id = %s
+				 OR EXISTS (
+					 SELECT 1 FROM "Project_Staff_Assignments" assigned_staff
+					 WHERE assigned_staff.project_id = p.project_id
+					   AND assigned_staff.user_id = %s
+				 )'''
+			params = (user_id, user_id, user_id)
 		query += " ORDER BY p.created_at DESC, p.project_id DESC"
 		return connection.execute(query, params).fetchall()
 
@@ -124,10 +160,29 @@ def get_project(project_id, user_id, role):
 			   ORDER BY h.changed_at DESC, h.history_id DESC''',
 			(project_id,),
 		).fetchall()
+		milestones = connection.execute(
+			'''SELECT m.milestone_id, m.title, m.description, m.due_date,
+					  m.status, m.created_by, u.username AS created_by_name,
+					  m.created_at, m.updated_at, m.completed_at
+			   FROM "Project_Milestones" m
+			   JOIN "Users" u ON u.user_id = m.created_by
+			   WHERE m.project_id = %s
+			   ORDER BY m.due_date NULLS LAST, m.created_at, m.milestone_id''',
+			(project_id,),
+		).fetchall()
+		staff = connection.execute(
+			'''SELECT u.user_id, u.username, u.role
+			   FROM "Project_Staff_Assignments" a
+			   JOIN "Users" u ON u.user_id = a.user_id
+			   WHERE a.project_id = %s ORDER BY u.username''',
+			(project_id,),
+		).fetchall()
 	return {
 		"project": project,
 		"approval_chain": approval_chain,
 		"status_history": status_history,
+		"milestones": milestones,
+		"staff": staff,
 	}
 
 
@@ -152,6 +207,7 @@ def update_project(project_id, data, user_id, role):
 
 	with connect_database() as connection:
 		project = _project_for_user(connection, project_id, user_id, role, lock=True)
+		_ensure_project_open(project)
 		if project["status"] != "draft":
 			raise WorkflowError("Only draft projects can be edited.", 409)
 		start_date = fields.get("start_date", project["start_date"])
@@ -164,6 +220,93 @@ def update_project(project_id, data, user_id, role):
 				WHERE project_id = %s RETURNING *''',
 			(*fields.values(), project_id),
 		).fetchone()
+
+
+def list_project_assignable_users():
+	with connect_database() as connection:
+		return connection.execute(
+			'''SELECT user_id, username, role FROM "Users"
+			   WHERE is_active = TRUE AND role IN ('admin', 'manager', 'staff')
+			   ORDER BY username'''
+		).fetchall()
+
+
+def list_project_approvers(user_id):
+	with connect_database() as connection:
+		return connection.execute(
+			'''SELECT user_id, username, role FROM "Users"
+			   WHERE is_active = TRUE AND role IN ('admin', 'manager')
+			     AND user_id <> %s
+			   ORDER BY username''',
+			(user_id,),
+		).fetchall()
+
+
+def update_project_team(project_id, data, user_id, role):
+	if role not in ("admin", "manager"):
+		raise WorkflowError("Only admins and managers can assign project staff.", 403)
+	if not data or set(data) - {"manager_id", "staff_ids"}:
+		raise WorkflowError("Provide manager_id, staff_ids, or both.")
+
+	manager_id = data.get("manager_id")
+	if "manager_id" in data and manager_id is not None:
+		if type(manager_id) is not int or manager_id <= 0:
+			raise WorkflowError("manager_id must be a positive user ID or null.")
+	staff_ids = data.get("staff_ids")
+	if "staff_ids" in data:
+		if (not isinstance(staff_ids, list)
+				or any(type(staff_id) is not int or staff_id <= 0 for staff_id in staff_ids)):
+			raise WorkflowError("staff_ids must be a list of positive user IDs.")
+		if len(set(staff_ids)) != len(staff_ids):
+			raise WorkflowError("A staff member can only be assigned once.")
+
+	with connect_database() as connection:
+		project = _project_for_user(connection, project_id, user_id, role, lock=True)
+		_ensure_project_open(project)
+		if "manager_id" in data and manager_id is not None:
+			manager = connection.execute(
+				'''SELECT user_id FROM "Users"
+				   WHERE user_id = %s AND is_active = TRUE
+					 AND role IN ('admin', 'manager', 'staff')''',
+				(manager_id,),
+			).fetchone()
+			if manager is None:
+				raise WorkflowError("Project manager must be an active user.")
+		if "staff_ids" in data:
+			staff = connection.execute(
+				'''SELECT user_id FROM "Users"
+				   WHERE user_id = ANY(%s) AND is_active = TRUE AND role = 'staff' ''',
+				(staff_ids,),
+			).fetchall()
+			if len(staff) != len(staff_ids):
+				raise WorkflowError("Every assigned staff member must be active and have the staff role.")
+
+		if "manager_id" in data:
+			project = connection.execute(
+				'''UPDATE "Projects" SET manager_id = %s, updated_at = NOW()
+				   WHERE project_id = %s RETURNING *''',
+				(manager_id, project_id),
+			).fetchone()
+		if "staff_ids" in data:
+			connection.execute(
+				'''DELETE FROM "Project_Staff_Assignments" WHERE project_id = %s''',
+				(project_id,),
+			)
+			for staff_id in staff_ids:
+				connection.execute(
+					'''INSERT INTO "Project_Staff_Assignments"
+						   (project_id, user_id, assigned_by)
+					   VALUES (%s, %s, %s)''',
+					(project_id, staff_id, user_id),
+				)
+		assigned_staff = connection.execute(
+			'''SELECT u.user_id, u.username, u.role
+			   FROM "Project_Staff_Assignments" a
+			   JOIN "Users" u ON u.user_id = a.user_id
+			   WHERE a.project_id = %s ORDER BY u.username''',
+			(project_id,),
+		).fetchall()
+		return {"project": project, "staff": assigned_staff}
 
 
 def submit_project(project_id, approver_ids, user_id, role):
@@ -179,13 +322,16 @@ def submit_project(project_id, approver_ids, user_id, role):
 		if project["status"] not in ("draft", "rejected"):
 			raise WorkflowError("Only draft or rejected projects can be submitted.", 409)
 		approvers = connection.execute(
-			'''SELECT user_id, role FROM "Users"
+			'''SELECT user_id, role, is_active FROM "Users"
 			   WHERE user_id = ANY(%s)''',
 			(approver_ids,),
 		).fetchall()
 		approvers_by_id = {approver["user_id"]: approver for approver in approvers}
 		if len(approvers_by_id) != len(approver_ids):
-			raise WorkflowError("One or more approvers do not exist.")
+			raise WorkflowError("One or more approvers do not exist or are inactive.")
+		if any(not approvers_by_id[approver_id]["is_active"]
+			   for approver_id in approver_ids):
+			raise WorkflowError("One or more approvers do not exist or are inactive.")
 		if project_id and project["created_by"] in approver_ids:
 			raise WorkflowError("A project creator cannot approve their own project.")
 		if any(approvers_by_id[approver_id]["role"] not in ("manager", "admin")
@@ -219,14 +365,15 @@ def submit_project(project_id, approver_ids, user_id, role):
 
 
 def update_project_status(project_id, status, user_id, role, reason=None):
-	if role not in ("manager", "admin"):
-		raise WorkflowError("Only managers and admins can change project status.", 403)
 	if not isinstance(status, str) or status not in PROJECT_STATUSES:
 		raise WorkflowError(f"status must be one of: {', '.join(sorted(PROJECT_STATUSES))}.")
 	if reason is not None and not isinstance(reason, str):
 		raise WorkflowError("reason must be text.")
 	with connect_database() as connection:
 		project = _project_for_user(connection, project_id, user_id, role, lock=True)
+		_ensure_project_open(project)
+		if project["manager_id"] != user_id and role not in ("manager", "admin"):
+			raise WorkflowError("Only this project's manager can change its status.", 403)
 		allowed = STATUS_TRANSITIONS.get(project["status"], set())
 		if status not in allowed:
 			raise WorkflowError(
@@ -241,6 +388,61 @@ def update_project_status(project_id, status, user_id, role, reason=None):
 			connection, project_id, project["status"], status, user_id, reason
 		)
 		return result
+
+
+def add_project_milestone(project_id, data, user_id, role):
+	title = data.get("title")
+	if not isinstance(title, str) or not title.strip():
+		raise WorkflowError("title is required.")
+	description = data.get("description")
+	if description is not None and not isinstance(description, str):
+		raise WorkflowError("description must be text.")
+	due_date = _parse_date(data.get("due_date"), "due_date")
+
+	with connect_database() as connection:
+		project = _project_for_user(connection, project_id, user_id, role, lock=True)
+		_ensure_project_open(project)
+		if project["manager_id"] != user_id and role not in ("admin", "manager"):
+			raise WorkflowError("Only admins, managers, and this project's manager can add milestones.", 403)
+		return connection.execute(
+			'''INSERT INTO "Project_Milestones"
+				   (project_id, title, description, due_date, created_by)
+			   VALUES (%s, %s, %s, %s, %s)
+			   RETURNING milestone_id, project_id, title, description, due_date,
+						 status, created_by, created_at, updated_at, completed_at''',
+			(project_id, title.strip(), description, due_date, user_id),
+		).fetchone()
+
+
+def update_project_milestone(project_id, milestone_id, data, user_id, role):
+	status = data.get("status")
+	if not isinstance(status, str) or status not in MILESTONE_STATUSES:
+		raise WorkflowError(
+			f"status must be one of: {', '.join(sorted(MILESTONE_STATUSES))}."
+		)
+
+	with connect_database() as connection:
+		project = _project_for_user(connection, project_id, user_id, role, lock=True)
+		_ensure_project_open(project)
+		if project["manager_id"] != user_id and role not in ("admin", "manager"):
+			raise WorkflowError("Only admins, managers, and this project's manager can update milestones.", 403)
+		milestone = connection.execute(
+			'''SELECT milestone_id FROM "Project_Milestones"
+			   WHERE milestone_id = %s AND project_id = %s''',
+			(milestone_id, project_id),
+		).fetchone()
+		if milestone is None:
+			raise WorkflowError("Milestone not found.", 404)
+		return connection.execute(
+			'''UPDATE "Project_Milestones"
+			   SET status = %s,
+				   completed_at = CASE WHEN %s = 'completed' THEN NOW() ELSE NULL END,
+				   updated_at = NOW()
+			   WHERE milestone_id = %s AND project_id = %s
+			   RETURNING milestone_id, project_id, title, description, due_date,
+						 status, created_by, created_at, updated_at, completed_at''',
+			(status, status, milestone_id, project_id),
+		).fetchone()
 
 
 def list_my_approvals(approver_id):
@@ -329,4 +531,3 @@ def decide_approval(approval_id, approver_id, decision, comments=None):
 			comments,
 		)
 	return {"project": result, "decision": decision}
-

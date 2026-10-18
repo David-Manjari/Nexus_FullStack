@@ -60,8 +60,13 @@ The disbursement blueprint uses the `/api` prefix. Other routes do not. Route-le
 | POST | `/projects` | Create a project |
 | GET | `/projects/<int:project_id>` | Get a project |
 | PATCH | `/projects/<int:project_id>` | Update a project |
+| GET | `/projects/assignable-users` | List active project managers and staff (admin/manager) |
+| GET | `/projects/approvers` | List active managers and admins eligible to approve projects, excluding the current user |
+| PATCH | `/projects/<int:project_id>/team` | Assign the project manager and/or staff (admin/manager) |
 | POST | `/projects/<int:project_id>/submit` | Submit a project for approval |
 | PATCH | `/projects/<int:project_id>/status` | Update project status |
+| POST | `/projects/<int:project_id>/milestones` | Add a project milestone (admin, manager, or assigned project manager) |
+| PATCH | `/projects/<int:project_id>/milestones/<int:milestone_id>` | Update milestone progress (admin, manager, or assigned project manager) |
 | GET | `/api/disbursements` | List disbursements; supports a `status` filter |
 | GET | `/api/disbursements/summary` | Get disbursement totals by status |
 | POST | `/api/disbursements` | Create a disbursement |
@@ -92,8 +97,11 @@ Send JSON unless uploading an asset image, which uses `multipart/form-data`. Req
 | `PATCH /procurements/<int:procurement_id>` | `item_name`, `asset_type`, `category`, `quantity`, `estimated_cost`, `supplier`, `reason`, `action` (`submit`, `cancel`, or `purchased`); provide at least one field or `action` |
 | `POST /projects` | `name` (required); `description`, `start_date`, `end_date` |
 | `PATCH /projects/<int:project_id>` | `name`, `description`, `start_date`, `end_date` (at least one required) |
+| `PATCH /projects/<int:project_id>/team` | `manager_id` (active user, only after approval), `staff_ids` (list of active staff user IDs); either field may be supplied |
 | `POST /projects/<int:project_id>/submit` | `approver_ids` (required: non-empty ordered list of approver user IDs) |
 | `PATCH /projects/<int:project_id>/status` | `status` (required), `reason`; status values: `approved`, `active`, `on_hold`, `completed`, `cancelled` |
+| `POST /projects/<int:project_id>/milestones` | `title` (required), `description`, `due_date` |
+| `PATCH /projects/<int:project_id>/milestones/<int:milestone_id>` | `status` (required: `planned`, `in_progress`, or `completed`) |
 | `POST /api/disbursements` | `payee`, `amount` (required); `description`, `currency` (defaults to `KES`) |
 | `POST /api/disbursements/<int:disbursement_id>/process` | `simulated_result` (`paid` or `failed`; defaults to `paid`) |
 
@@ -110,6 +118,8 @@ curl -b cookies.txt http://localhost:5000/requests
 ```
 
 The supported roles are `admin`, `manager`, `store_manager`, and `staff`. Access is checked against the user's current database role. Deactivated accounts cannot log in or continue using existing sessions.
+
+Project access also includes the project's creator and assigned `manager_id`. Admins and managers can assign a project manager and staff to any project that is not completed or cancelled. Admins, managers, and the assigned project manager can manage milestones while a project is open. Completed and cancelled projects are locked against further edits.
 
 ## Frontend connection
 
