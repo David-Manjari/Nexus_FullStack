@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import NotificationBell from "../components/NotificationBell";
 
 export const PAGE_LINKS = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -41,6 +42,7 @@ export default function Navbar({ currentPage }) {
 
                 {user && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <NotificationBell />
                         <span style={{ color: '#cbd5e1' }}>{user.name}</span>
                         <button type="button" onClick={handleLogout} style={{ padding: '8px 12px', borderRadius: '8px' }}>
                             Logout
