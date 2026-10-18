@@ -15,8 +15,6 @@ from .routes.projects import projects_bp
 from .routes.requests import requests_bp
 from .routes.sessions import sessions_bp
 from .routes.users import users_bp
-from .routes.approvals import approvals_bp
-
 def create_app(*, secret_key=None):
     """Create the API app; configure SECRET_KEY in the runtime environment."""
     secret_key = secret_key or os.environ.get("SECRET_KEY")
@@ -53,9 +51,6 @@ def create_app(*, secret_key=None):
     app.register_blueprint(procurement_bp, url_prefix="/procurements")
     app.register_blueprint(projects_bp, url_prefix="/projects")
     app.register_blueprint(disbursements_bp)
-    app.register_blueprint(approvals_bp, url_prefix="/approvals")
-    register_db_error_handlers(app)
-
     @app.get("/")
     def index():
         return jsonify(
