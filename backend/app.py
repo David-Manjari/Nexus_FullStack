@@ -5,6 +5,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from .db import connect_database, init_db, register_db_error_handlers
+from .errors import register_error_handlers
 from .routes.approvals import approvals_bp
 from .routes.assets import assets_bp, assignments_bp
 from .routes.audit import audit_bp
@@ -15,6 +16,7 @@ from .routes.projects import projects_bp
 from .routes.requests import requests_bp
 from .routes.sessions import sessions_bp
 from .routes.users import users_bp
+
 def create_app(*, secret_key=None):
     """Create the API app; configure SECRET_KEY in the runtime environment."""
     secret_key = secret_key or os.environ.get("SECRET_KEY")
@@ -38,6 +40,8 @@ def create_app(*, secret_key=None):
         SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true",
     )
     CORS(app, origins=frontend_origins, supports_credentials=True)
+    register_db_error_handlers(app)
+    register_error_handlers(app)
 
     init_db()
     app.register_blueprint(sessions_bp, url_prefix="/session")
