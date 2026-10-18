@@ -46,7 +46,7 @@ def _amount(value):
 def list_disbursements():
     status = request.args.get("status")
     if status and status not in VALID_STATUSES:
-        return jsonify(error="Invalid payout status."), 400
+        return jsonify(error="Invalid payout status."), 422
 
     query = 'SELECT * FROM "Disbursements"'
     params = ()
@@ -88,16 +88,16 @@ def create_disbursement():
     amount = _amount(data.get("amount"))
 
     if not isinstance(payee, str) or not payee.strip():
-        return jsonify(error="A payee name is required."), 400
+        return jsonify(error="A payee name is required."), 422
 
     if not isinstance(description, str):
-        return jsonify(error="Description must be text."), 400
+        return jsonify(error="Description must be text."), 422
 
     if not isinstance(currency, str) or not currency.strip():
-        return jsonify(error="A currency is required."), 400
+        return jsonify(error="A currency is required."), 422
 
     if amount is None:
-        return jsonify(error="Amount must be a finite positive number."), 400
+        return jsonify(error="Amount must be a finite positive number."), 422
 
     reference = "NEX-" + uuid.uuid4().hex[:10].upper()
     with connect_database() as connection:
@@ -140,7 +140,7 @@ def process_payout(disbursement_id):
     if simulated_result not in ("paid", "failed"):
         return jsonify(
             error="simulated_result must be 'paid' or 'failed'."
-        ), 400
+        ), 422
 
     try:
         payout, result = process_disbursement(

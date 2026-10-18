@@ -125,7 +125,7 @@ def list_procurements():
     """List procurements, newest first. Optional ?status= filter."""
     status = request.args.get("status")
     if status is not None and status not in PROCUREMENT_STATUSES:
-        return _error("Unknown status filter.", 400)
+        return _error("Unknown status filter.", 422)
 
     where, params = ("WHERE p.status = %s", (status,)) if status else ("", ())
     with connect_database() as connection:
@@ -164,15 +164,15 @@ def create_procurement():
     user_id = session["user_id"]
     fields, problem = _clean_fields(data)
     if problem:
-        return _error(problem, 400)
+        return _error(problem, 422)
 
     request_id = None
     if data.get("request_id") is not None:
         request_id = _int(data["request_id"])
         if request_id is None:
-            return _error("request_id must be a number.", 400)
+            return _error("request_id must be a number.", 422)
     elif "item_name" not in fields:
-        return _error("item_name is required.", 400)
+        return _error("item_name is required.", 422)
 
     try:
         with connect_database() as connection:
@@ -185,7 +185,7 @@ def create_procurement():
                 if found is None:
                     return _error("Request not found.", 404)
                 if found["request_type"] != "asset":
-                    return _error("Only asset requests can become a procurement.", 400)
+                    return _error("Only asset requests can become a procurement.", 422)
                 if found["status"] not in CONVERTIBLE_REQUEST_STATUSES:
                     return _error(f"A {found['status']} request cannot be converted.", 409)
                 created = convert_to_procurement(
@@ -236,13 +236,13 @@ def update_procurement(procurement_id):
     user_id = session["user_id"]
     fields, problem = _clean_fields(data)
     if problem:
-        return _error(problem, 400)
+        return _error(problem, 422)
 
     action = data.get("action")
     if action is not None and action not in ACTIONS:
-        return _error("action must be one of: submit, cancel, purchased.", 400)
+        return _error("action must be one of: submit, cancel, purchased.", 422)
     if not fields and action is None:
-        return _error("Nothing to update.", 400)
+        return _error("Nothing to update.", 422)
 
     with connect_database() as connection:
         current = connection.execute(
@@ -267,7 +267,7 @@ def update_procurement(procurement_id):
             if action == "submit":
                 cost = fields.get("estimated_cost", current["estimated_cost"])
                 if cost is None or cost <= 0:
-                    return _error("Add an estimated_cost above 0 before submitting.", 400)
+                    return _error("Add an estimated_cost above 0 before submitting.", 422)
 
         sets = [f"{column} = %s" for column in fields]
         params = list(fields.values())
