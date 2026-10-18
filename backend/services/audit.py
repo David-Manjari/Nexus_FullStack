@@ -72,23 +72,23 @@ def get_account_activity(user_id, limit=50):
 		requests_by_status = _all(
 			connection,
 			'''SELECT status, COUNT(*) AS request_count
-			   FROM "Requests" WHERE requester_id = %s
+			   FROM "Requests" WHERE requested_by = %s
 			   GROUP BY status ORDER BY status''',
 			(user_id,),
 		)
 		procurements_by_status = _all(
 			connection,
 			'''SELECT status, COUNT(*) AS procurement_count
-			   FROM "Procurements" WHERE requested_by = %s
+			   FROM "Procurement" WHERE raised_by = %s
 			   GROUP BY status ORDER BY status''',
 			(user_id,),
 		)
 		decisions = _all(
 			connection,
-			'''SELECT 'procurement' AS kind, procurement_id AS entity_id,
-			          level AS step, decision, decided_at
+			'''SELECT 'approval' AS kind, reference_id AS entity_id,
+			   NULL::integer AS step, status AS decision, decided_at
 			   FROM "Approvals"
-			   WHERE approver_id = %s AND decision <> 'pending'
+			   WHERE decided_by = %s AND status <> 'pending'
 			   UNION ALL
 			   SELECT 'project', project_id, step_order, status, decided_at
 			   FROM "Approval_Requests"
@@ -119,16 +119,17 @@ def get_procurement_audit(limit=50):
 			'''SELECT status,
 			          COUNT(*) AS procurement_count,
 			          COALESCE(SUM(estimated_cost), 0) AS total_estimated_cost
-			   FROM "Procurements"
+			   FROM "Procurement"
 			   GROUP BY status ORDER BY status''',
 		)
 		pending_approvals = _all(
 			connection,
 			'''SELECT p.procurement_id, p.item_name, p.estimated_cost,
-			          p.status AS procurement_status, a.level, a.approver_id, a.created_at
+			   		  p.status AS procurement_status, a.approval_id,
+			   		  a.requested_by, a.created_at
 			   FROM "Approvals" a
-			   JOIN "Procurements" p ON p.procurement_id = a.procurement_id
-			   WHERE a.decision = 'pending'
+			   JOIN "Procurement" p ON p.procurement_id = a.reference_id
+			   WHERE a.request_type = 'equipment_procurement' AND a.status = 'pending'
 			   ORDER BY a.created_at
 			   LIMIT %s''',
 			(limit,),
@@ -137,7 +138,7 @@ def get_procurement_audit(limit=50):
 			connection,
 			'''SELECT p.procurement_id, p.item_name, p.estimated_cost,
 			          d.disbursement_id, d.status AS disbursement_status
-			   FROM "Procurements" p
+			   FROM "Procurement" p
 			   LEFT JOIN "Disbursements" d ON d.procurement_id = p.procurement_id
 			   WHERE p.status = 'approved'
 			     AND (d.disbursement_id IS NULL OR d.status NOT IN ('success', 'paid'))
@@ -147,12 +148,14 @@ def get_procurement_audit(limit=50):
 		)
 		recent_decisions = _all(
 			connection,
-			'''SELECT a.procurement_id, p.item_name, a.level, a.decision, a.comment,
-			          a.approver_id, u.username AS approver_name, a.decided_at
+			'''SELECT a.reference_id AS procurement_id, p.item_name,
+				  	  a.status AS decision, a.decision_reason AS comment,
+					  a.decided_by AS approver_id, u.username AS approver_name,
+					  a.decided_at
 			   FROM "Approvals" a
-			   JOIN "Procurements" p ON p.procurement_id = a.procurement_id
-			   LEFT JOIN "Users" u ON u.user_id = a.approver_id
-			   WHERE a.decision <> 'pending'
+			   JOIN "Procurement" p ON p.procurement_id = a.reference_id
+			   LEFT JOIN "Users" u ON u.user_id = a.decided_by
+			   WHERE a.request_type = 'equipment_procurement' AND a.status <> 'pending'
 			   ORDER BY a.decided_at DESC NULLS LAST
 			   LIMIT %s''',
 			(limit,),
