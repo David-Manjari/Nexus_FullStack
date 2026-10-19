@@ -7,7 +7,7 @@ import "./Approvals.css";
 
 function Approvals() {
   const [approvals, setApprovals] = useState([]);
-  const [comments, setComments] = useState({});
+  const [reasons, setReasons] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -27,11 +27,16 @@ function Approvals() {
   useEffect(() => { load(); }, []);
 
   async function updateStatus(approval, decision) {
+    const reason = (reasons[approval.id] || "").trim();
+    if (decision === "rejected" && !reason) {
+      setError("Please enter a reason before rejecting a request.");
+      return;
+    }
+
     setBusyId(approval.id);
     setError("");
     try {
-      // The backend advances the project's sequential approval chain and owns the decision state.
-      await decideApproval(approval.id, decision.toLowerCase(), comments[approval.id] || "");
+      await decideApproval(approval.id, decision, reason);
       await load();
     } catch (actionError) {
       setError(actionError.message || "Could not submit the approval decision.");
@@ -50,10 +55,10 @@ function Approvals() {
       {error && <ErrorMessage message={error} onRetry={load} />}
       {loading && <Loading message="Loading approvals..." />}
       {!loading && !error && approvals.length === 0 && (
-        <EmptyState title="No approvals" message="There are no pending project approvals assigned to you." />
+        <EmptyState title="No approvals" message="There are no pending requests waiting for your approval." />
       )}
 
-      {!loading && !error && approvals.length > 0 && <div className="approval-list">
+      {!loading && approvals.length > 0 && <div className="approval-list">
         {approvals.map((approval) => {
           const status = approval.status[0].toUpperCase() + approval.status.slice(1);
           const statusClass = status.toLowerCase();
@@ -62,8 +67,8 @@ function Approvals() {
             <div className="approval-card" key={approval.id}>
               <div className="approval-card-header">
                 <div>
-                  <h2>{approval.projectName}</h2>
-                  <p>Project {approval.projectId} · round {approval.round} · step {approval.step}</p>
+                  <h2>{approval.summary}</h2>
+                  <p>{approval.typeLabel} · requested by {approval.requestedBy}</p>
                 </div>
 
                 <strong className={`approval-status ${statusClass}`}>{status}</strong>
@@ -81,25 +86,25 @@ function Approvals() {
               </div>
 
               <div className="approval-actions">
-                  <input
-                    type="text"
-                    placeholder="Add comment (optional)"
-                    value={comments[approval.id] || ""}
-                    onChange={(event) =>
-                      setComments({
-                        ...comments,
-                        [approval.id]: event.target.value,
-                      })
-                    }
-                  />
+                <input
+                  type="text"
+                  placeholder="Reason (required to reject)"
+                  value={reasons[approval.id] || ""}
+                  onChange={(event) =>
+                    setReasons({
+                      ...reasons,
+                      [approval.id]: event.target.value,
+                    })
+                  }
+                />
 
-                  <button type="button" disabled={busyId === approval.id} onClick={() => updateStatus(approval, "Approved")}>
-                    Approve
-                  </button>
+                <button type="button" disabled={busyId === approval.id} onClick={() => updateStatus(approval, "approved")}>
+                  Approve
+                </button>
 
-                  <button type="button" disabled={busyId === approval.id} onClick={() => updateStatus(approval, "Rejected")}>
-                    Reject
-                  </button>
+                <button type="button" disabled={busyId === approval.id} onClick={() => updateStatus(approval, "rejected")}>
+                  Reject
+                </button>
               </div>
             </div>
           );
