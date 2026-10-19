@@ -128,50 +128,50 @@ def create_request():
 
     request_type = _text(data, "request_type")
     if request_type not in REQUEST_TYPES:
-        return _error("request_type must be one of: asset, disbursement, project.", 400)
+        return _error("request_type must be one of: asset, disbursement, project.", 422)
 
     reason = _text(data, "reason")
     if reason is None:
-        return _error("A reason is required.", 400)
+        return _error("A reason is required.", 422)
 
     item_name = _text(data, "item_name")
     category = _text(data, "category")
     if (item_name and len(item_name) > 150) or (category and len(category) > 100):
-        return _error("item_name or category is too long.", 400)
+        return _error("item_name or category is too long.", 422)
 
     asset_type = _text(data, "asset_type")
     if asset_type is not None and asset_type not in ASSET_TYPES:
-        return _error("asset_type must be one of: tool, device, vehicle.", 400)
+        return _error("asset_type must be one of: tool, device, vehicle.", 422)
 
     quantity = 1 if data.get("quantity") is None else _int(data.get("quantity"))
     if quantity is None or quantity < 1:
-        return _error("quantity must be a whole number of at least 1.", 400)
+        return _error("quantity must be a whole number of at least 1.", 422)
 
     needed_by = None
     if data.get("needed_by") is not None:
         needed_by = _date(data.get("needed_by"))
         if needed_by is None:
-            return _error("needed_by must be a date in YYYY-MM-DD format.", 400)
+            return _error("needed_by must be a date in YYYY-MM-DD format.", 422)
 
     asset_id = None
     if data.get("asset_id") is not None:
         asset_id = _int(data.get("asset_id"))
         if asset_id is None:
-            return _error("asset_id must be a number.", 400)
+            return _error("asset_id must be a number.", 422)
 
     project_id = None
     if data.get("project_id") is not None:
         project_id = _int(data.get("project_id"))
         if project_id is None:
-            return _error("project_id must be a number.", 400)
+            return _error("project_id must be a number.", 422)
 
     amount = None
     if request_type == "asset" and asset_id is None and item_name is None:
-        return _error("An asset request needs an item_name or an asset_id.", 400)
+        return _error("An asset request needs an item_name or an asset_id.", 422)
     if request_type == "disbursement":
         amount = _amount(data.get("amount"))
         if amount is None:
-            return _error("A disbursement request needs a positive amount.", 400)
+            return _error("A disbursement request needs a positive amount.", 422)
 
     with connect_database() as connection:
         if asset_id is not None:
@@ -179,7 +179,7 @@ def create_request():
                 f"SELECT asset_type FROM {ASSETS} WHERE asset_id = %s", (asset_id,)
             ).fetchone()
             if asset is None:
-                return _error("That asset does not exist.", 400)
+                return _error("That asset does not exist.", 422)
             asset_type = asset_type or asset["asset_type"]
 
         created = connection.execute(
@@ -242,9 +242,9 @@ def list_requests():
     status = request.args.get("status")
     request_type = request.args.get("type")
     if status is not None and status not in REQUEST_STATUSES:
-        return _error("Unknown status filter.", 400)
+        return _error("Unknown status filter.", 422)
     if request_type is not None and request_type not in REQUEST_TYPES:
-        return _error("Unknown type filter.", 400)
+        return _error("Unknown type filter.", 422)
 
     conditions, params = _visibility(session["role"], session["user_id"])
     conditions = [conditions]
@@ -296,7 +296,7 @@ def fulfil_request(request_id):
     data = _payload()
     chosen_asset_id = _int(data.get("asset_id")) if data.get("asset_id") is not None else None
     if data.get("asset_id") is not None and chosen_asset_id is None:
-        return _error("asset_id must be a number.", 400)
+        return _error("asset_id must be a number.", 422)
 
     with connect_database() as connection:
         found = connection.execute(
@@ -307,13 +307,13 @@ def fulfil_request(request_id):
         if found is None:
             return _error("Request not found.", 404)
         if found["request_type"] != "asset":
-            return _error("Only asset requests can be fulfilled this way.", 400)
+            return _error("Only asset requests can be fulfilled this way.", 422)
         if found["status"] not in FULFILLABLE_STATUSES:
             return _error(f"A {found['status']} request cannot be fulfilled.", 409)
 
         asset_id = chosen_asset_id or found["asset_id"]
         if asset_id is None:
-            return _error("Choose an asset to hand over (asset_id).", 400)
+            return _error("Choose an asset to hand over (asset_id).", 422)
 
         asset = connection.execute(
             f"SELECT name, status FROM {ASSETS} WHERE asset_id = %s FOR UPDATE",

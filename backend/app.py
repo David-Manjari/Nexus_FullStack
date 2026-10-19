@@ -5,6 +5,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from .db import connect_database, init_db, register_db_error_handlers
+from .errors import register_error_handlers
 from .routes.approvals import approvals_bp
 from .routes.assets import assets_bp, assignments_bp
 from .routes.audit import audit_bp
@@ -39,6 +40,8 @@ def create_app(*, secret_key=None):
         SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true",
     )
     CORS(app, origins=frontend_origins, supports_credentials=True)
+    register_db_error_handlers(app)
+    register_error_handlers(app)
 
     init_db()
     app.register_blueprint(sessions_bp, url_prefix="/session")
@@ -52,8 +55,6 @@ def create_app(*, secret_key=None):
     app.register_blueprint(procurement_bp, url_prefix="/procurements")
     app.register_blueprint(projects_bp, url_prefix="/projects")
     app.register_blueprint(disbursements_bp)
-    register_db_error_handlers(app)
-
     @app.get("/")
     def index():
         return jsonify(
