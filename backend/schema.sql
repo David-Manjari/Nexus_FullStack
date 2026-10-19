@@ -280,7 +280,6 @@ CREATE TABLE IF NOT EXISTS "Project_Milestones" (
     completed_at  TIMESTAMPTZ
 );
 
-<<<<<<< HEAD
 -- Approval inbox (approvals module). Give this to the database owner to merge into schema.sql.
 -- The names "Approvals" and "Approval_Requests" are already used by the procurement and
 -- project approval chains, so this module uses "Approval_Items".
@@ -312,7 +311,6 @@ CREATE TABLE IF NOT EXISTS "Approval_Views" (
     user_id    INTEGER PRIMARY KEY REFERENCES "Users"(user_id) ON DELETE CASCADE,
     viewed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-=======
 CREATE INDEX IF NOT EXISTS project_milestones_order_idx
     ON "Project_Milestones"(project_id, due_date, milestone_id);
 
@@ -451,4 +449,3 @@ CREATE TABLE IF NOT EXISTS "Request_History" (
 
 CREATE INDEX IF NOT EXISTS request_history_entity_idx
     ON "Request_History"(entity_type, entity_id, changed_at);
->>>>>>> origin/main
