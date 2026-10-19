@@ -28,10 +28,18 @@ CREATE TABLE IF NOT EXISTS "Projects" (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 );
+
+CREATE TABLE IF NOT EXISTS "Project_Staff_Assignments" (
+    project_id   INTEGER NOT NULL REFERENCES "Projects"(project_id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL REFERENCES "Users"(user_id) ON DELETE CASCADE,
+    assigned_by  INTEGER REFERENCES "Users"(user_id) ON DELETE SET NULL,
+    assigned_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (project_id, user_id)
+);
+
 CREATE OR REPLACE FUNCTION projects_sync_compat() RETURNS trigger AS $$
 BEGIN
     IF NEW.created_by IS NULL THEN NEW.created_by := NEW.manager_id; END IF;
-    IF NEW.manager_id IS NULL THEN NEW.manager_id := NEW.created_by; END IF;
 
     IF TG_OP = 'INSERT' THEN
         IF NEW.end_date IS NULL THEN NEW.end_date := NEW.due_date; END IF;
@@ -53,6 +61,9 @@ DROP TRIGGER IF EXISTS projects_sync_compat_trg ON "Projects";
 CREATE TRIGGER projects_sync_compat_trg
     BEFORE INSERT OR UPDATE ON "Projects"
     FOR EACH ROW EXECUTE FUNCTION projects_sync_compat();
+
+UPDATE "Projects" SET manager_id = NULL
+WHERE status IN ('draft', 'pending_approval', 'rejected') AND manager_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS "Tasks" (
     task_id      SERIAL PRIMARY KEY,
     project_id   INTEGER NOT NULL REFERENCES "Projects"(project_id) ON DELETE CASCADE,
@@ -254,5 +265,22 @@ CREATE INDEX IF NOT EXISTS approvals_project_round_idx
 	ON "Approval_Requests"(project_id, round_number, step_order);
 CREATE INDEX IF NOT EXISTS project_status_history_idx
 	ON "Project_Status_History"(project_id, changed_at DESC);
+
+CREATE TABLE IF NOT EXISTS "Project_Milestones" (
+    milestone_id  SERIAL PRIMARY KEY,
+    project_id    INTEGER NOT NULL REFERENCES "Projects"(project_id) ON DELETE CASCADE,
+    title         VARCHAR(200) NOT NULL,
+    description   TEXT,
+    due_date      DATE,
+    status        VARCHAR(20) NOT NULL DEFAULT 'planned'
+                  CHECK (status IN ('planned', 'in_progress', 'completed')),
+    created_by    INTEGER NOT NULL REFERENCES "Users"(user_id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at  TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS project_milestones_order_idx
+    ON "Project_Milestones"(project_id, due_date, milestone_id);
 
 
