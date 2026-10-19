@@ -6,7 +6,7 @@ export const PAGE_LINKS = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'inventory', label: 'Inventory', roles: ['admin', 'manager', 'store_manager', 'staff'] },
     { id: 'requests', label: 'Requests', roles: ['admin', 'manager', 'store_manager', 'staff'] },
-    { id: 'procurement', label: 'Procurement', roles: ['admin', 'manager', 'store_manager'] },
+    { id: 'procurement', label: 'Procurement', roles: ['store_manager'] },
     { id: 'approvals', label: 'Approvals', roles: ['admin', 'manager'] },
     { id: 'disbursements', label: 'Disbursements', roles: ['admin', 'manager'] },
     { id: 'projects', label: 'Projects', roles: ['admin', 'manager', 'store_manager', 'staff'] },

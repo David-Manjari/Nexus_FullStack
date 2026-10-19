@@ -284,3 +284,137 @@ CREATE INDEX IF NOT EXISTS project_milestones_order_idx
     ON "Project_Milestones"(project_id, due_date, milestone_id);
 
 
+
+-- ---------------------------------------------------------------------------
+-- Requests and Procurements: extra columns, wider status lists, history.
+-- Owner: Member 4 (requests and procurement). Additive only: no column is
+-- removed or renamed, so existing rows and other modules keep working.
+-- Safe to run on every start: every statement can be repeated.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "Requests"
+    ADD COLUMN IF NOT EXISTS request_type VARCHAR(20) NOT NULL DEFAULT 'asset',
+    ADD COLUMN IF NOT EXISTS category     VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS quantity     INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS amount       NUMERIC(12, 2),
+    ADD COLUMN IF NOT EXISTS needed_by    DATE,
+    ADD COLUMN IF NOT EXISTS asset_type   VARCHAR(10),
+    ADD COLUMN IF NOT EXISTS escalated_to INTEGER REFERENCES "Users"(user_id),
+    ADD COLUMN IF NOT EXISTS fulfilled_by INTEGER REFERENCES "Users"(user_id),
+    ADD COLUMN IF NOT EXISTS updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- Replace the two original checks (they only allowed asset requests and five
+-- statuses) with named, wider ones. Existing rows already satisfy them.
+ALTER TABLE "Requests" DROP CONSTRAINT IF EXISTS "Requests_check";
+ALTER TABLE "Requests" DROP CONSTRAINT IF EXISTS "Requests_status_check";
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_status_values'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_status_values CHECK (status IN
+                ('pending', 'escalated', 'approved', 'rejected', 'fulfilled', 'converted', 'cancelled'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_type_values'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_type_values CHECK (request_type IN
+                ('asset', 'disbursement', 'project'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_asset_needs_item'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_asset_needs_item CHECK
+                (request_type <> 'asset' OR asset_id IS NOT NULL OR item_name IS NOT NULL);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_disbursement_needs_amount'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_disbursement_needs_amount CHECK
+                (request_type <> 'disbursement' OR amount IS NOT NULL);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_amount_positive'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_amount_positive CHECK (amount IS NULL OR amount > 0);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_quantity_positive'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_quantity_positive CHECK (quantity > 0);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_asset_type_values'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_asset_type_values CHECK
+                (asset_type IS NULL OR asset_type IN ('tool', 'device', 'vehicle'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS requests_status_idx       ON "Requests"(status);
+CREATE INDEX IF NOT EXISTS requests_requester_idx    ON "Requests"(requester_id);
+CREATE INDEX IF NOT EXISTS requests_escalated_to_idx ON "Requests"(escalated_to);
+
+ALTER TABLE "Procurements"
+    ADD COLUMN IF NOT EXISTS category   VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS asset_type VARCHAR(10),
+    ADD COLUMN IF NOT EXISTS reason     TEXT,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- A draft has no cost yet, so the cost may be empty until it is submitted.
+ALTER TABLE "Procurements" ALTER COLUMN estimated_cost DROP NOT NULL;
+
+-- Keep the approval-chain statuses and add the draft/purchase life cycle.
+ALTER TABLE "Procurements" DROP CONSTRAINT IF EXISTS "Procurements_status_check";
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'procurements_status_values'
+                   AND conrelid = '"Procurements"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Procurements" ADD CONSTRAINT procurements_status_values CHECK (status IN
+                ('draft', 'pending', 'pending_approval', 'level_1', 'level_2',
+                 'approved', 'rejected', 'purchased', 'cancelled'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'procurements_asset_type_values'
+                   AND conrelid = '"Procurements"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Procurements" ADD CONSTRAINT procurements_asset_type_values CHECK
+                (asset_type IS NULL OR asset_type IN ('tool', 'device', 'vehicle'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS procurements_status_idx ON "Procurements"(status);
+
+-- One row per status change of a request or procurement. Powers the timeline
+-- in the app and doubles as an audit trail. changed_by is NULL for the system.
+CREATE TABLE IF NOT EXISTS "Request_History" (
+    history_id   SERIAL PRIMARY KEY,
+    entity_type  VARCHAR(12) NOT NULL CHECK (entity_type IN ('request', 'procurement')),
+    entity_id    INTEGER     NOT NULL,
+    status       VARCHAR(24) NOT NULL,
+    note         TEXT,
+    changed_by   INTEGER REFERENCES "Users"(user_id),
+    changed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS request_history_entity_idx
+    ON "Request_History"(entity_type, entity_id, changed_at);
