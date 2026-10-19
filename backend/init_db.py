@@ -5,8 +5,9 @@ from .db import connect_database
 SCHEMA_FILE = Path(__file__).with_name("schema.sql")
 
 TABLES = (
-    "Audit_Log", "Notifications", "Disbursements", "Approvals", "Procurements",
+    "Request_History", "Audit_Log", "Notifications", "Disbursements", "Approvals", "Procurements",
     "Asset_Assignments", "Requests", "Vehicle_Details", "Assets", "Tasks",
+    "Project_Milestones",
     "Projects", "Users",
 )
 

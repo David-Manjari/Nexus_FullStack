@@ -28,10 +28,18 @@ CREATE TABLE IF NOT EXISTS "Projects" (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 );
+
+CREATE TABLE IF NOT EXISTS "Project_Staff_Assignments" (
+    project_id   INTEGER NOT NULL REFERENCES "Projects"(project_id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL REFERENCES "Users"(user_id) ON DELETE CASCADE,
+    assigned_by  INTEGER REFERENCES "Users"(user_id) ON DELETE SET NULL,
+    assigned_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (project_id, user_id)
+);
+
 CREATE OR REPLACE FUNCTION projects_sync_compat() RETURNS trigger AS $$
 BEGIN
     IF NEW.created_by IS NULL THEN NEW.created_by := NEW.manager_id; END IF;
-    IF NEW.manager_id IS NULL THEN NEW.manager_id := NEW.created_by; END IF;
 
     IF TG_OP = 'INSERT' THEN
         IF NEW.end_date IS NULL THEN NEW.end_date := NEW.due_date; END IF;
@@ -53,6 +61,9 @@ DROP TRIGGER IF EXISTS projects_sync_compat_trg ON "Projects";
 CREATE TRIGGER projects_sync_compat_trg
     BEFORE INSERT OR UPDATE ON "Projects"
     FOR EACH ROW EXECUTE FUNCTION projects_sync_compat();
+
+UPDATE "Projects" SET manager_id = NULL
+WHERE status IN ('draft', 'pending_approval', 'rejected') AND manager_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS "Tasks" (
     task_id      SERIAL PRIMARY KEY,
     project_id   INTEGER NOT NULL REFERENCES "Projects"(project_id) ON DELETE CASCADE,
@@ -255,7 +266,21 @@ CREATE INDEX IF NOT EXISTS approvals_project_round_idx
 CREATE INDEX IF NOT EXISTS project_status_history_idx
 	ON "Project_Status_History"(project_id, changed_at DESC);
 
+CREATE TABLE IF NOT EXISTS "Project_Milestones" (
+    milestone_id  SERIAL PRIMARY KEY,
+    project_id    INTEGER NOT NULL REFERENCES "Projects"(project_id) ON DELETE CASCADE,
+    title         VARCHAR(200) NOT NULL,
+    description   TEXT,
+    due_date      DATE,
+    status        VARCHAR(20) NOT NULL DEFAULT 'planned'
+                  CHECK (status IN ('planned', 'in_progress', 'completed')),
+    created_by    INTEGER NOT NULL REFERENCES "Users"(user_id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at  TIMESTAMPTZ
+);
 
+<<<<<<< HEAD
 -- Approval inbox (approvals module). Give this to the database owner to merge into schema.sql.
 -- The names "Approvals" and "Approval_Requests" are already used by the procurement and
 -- project approval chains, so this module uses "Approval_Items".
@@ -287,3 +312,143 @@ CREATE TABLE IF NOT EXISTS "Approval_Views" (
     user_id    INTEGER PRIMARY KEY REFERENCES "Users"(user_id) ON DELETE CASCADE,
     viewed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+=======
+CREATE INDEX IF NOT EXISTS project_milestones_order_idx
+    ON "Project_Milestones"(project_id, due_date, milestone_id);
+
+
+
+-- ---------------------------------------------------------------------------
+-- Requests and Procurements: extra columns, wider status lists, history.
+-- Owner: Member 4 (requests and procurement). Additive only: no column is
+-- removed or renamed, so existing rows and other modules keep working.
+-- Safe to run on every start: every statement can be repeated.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "Requests"
+    ADD COLUMN IF NOT EXISTS request_type VARCHAR(20) NOT NULL DEFAULT 'asset',
+    ADD COLUMN IF NOT EXISTS category     VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS quantity     INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS amount       NUMERIC(12, 2),
+    ADD COLUMN IF NOT EXISTS needed_by    DATE,
+    ADD COLUMN IF NOT EXISTS asset_type   VARCHAR(10),
+    ADD COLUMN IF NOT EXISTS escalated_to INTEGER REFERENCES "Users"(user_id),
+    ADD COLUMN IF NOT EXISTS fulfilled_by INTEGER REFERENCES "Users"(user_id),
+    ADD COLUMN IF NOT EXISTS updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- Replace the two original checks (they only allowed asset requests and five
+-- statuses) with named, wider ones. Existing rows already satisfy them.
+ALTER TABLE "Requests" DROP CONSTRAINT IF EXISTS "Requests_check";
+ALTER TABLE "Requests" DROP CONSTRAINT IF EXISTS "Requests_status_check";
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_status_values'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_status_values CHECK (status IN
+                ('pending', 'escalated', 'approved', 'rejected', 'fulfilled', 'converted', 'cancelled'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_type_values'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_type_values CHECK (request_type IN
+                ('asset', 'disbursement', 'project'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_asset_needs_item'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_asset_needs_item CHECK
+                (request_type <> 'asset' OR asset_id IS NOT NULL OR item_name IS NOT NULL);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_disbursement_needs_amount'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_disbursement_needs_amount CHECK
+                (request_type <> 'disbursement' OR amount IS NOT NULL);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_amount_positive'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_amount_positive CHECK (amount IS NULL OR amount > 0);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_quantity_positive'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_quantity_positive CHECK (quantity > 0);
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_asset_type_values'
+                   AND conrelid = '"Requests"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Requests" ADD CONSTRAINT requests_asset_type_values CHECK
+                (asset_type IS NULL OR asset_type IN ('tool', 'device', 'vehicle'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS requests_status_idx       ON "Requests"(status);
+CREATE INDEX IF NOT EXISTS requests_requester_idx    ON "Requests"(requester_id);
+CREATE INDEX IF NOT EXISTS requests_escalated_to_idx ON "Requests"(escalated_to);
+
+ALTER TABLE "Procurements"
+    ADD COLUMN IF NOT EXISTS category   VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS asset_type VARCHAR(10),
+    ADD COLUMN IF NOT EXISTS reason     TEXT,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- A draft has no cost yet, so the cost may be empty until it is submitted.
+ALTER TABLE "Procurements" ALTER COLUMN estimated_cost DROP NOT NULL;
+
+-- Keep the approval-chain statuses and add the draft/purchase life cycle.
+ALTER TABLE "Procurements" DROP CONSTRAINT IF EXISTS "Procurements_status_check";
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'procurements_status_values'
+                   AND conrelid = '"Procurements"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Procurements" ADD CONSTRAINT procurements_status_values CHECK (status IN
+                ('draft', 'pending', 'pending_approval', 'level_1', 'level_2',
+                 'approved', 'rejected', 'purchased', 'cancelled'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'procurements_asset_type_values'
+                   AND conrelid = '"Procurements"'::regclass) THEN
+        BEGIN
+            ALTER TABLE "Procurements" ADD CONSTRAINT procurements_asset_type_values CHECK
+                (asset_type IS NULL OR asset_type IN ('tool', 'device', 'vehicle'));
+        EXCEPTION WHEN duplicate_object THEN NULL;  -- another process got there first
+        END;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS procurements_status_idx ON "Procurements"(status);
+
+-- One row per status change of a request or procurement. Powers the timeline
+-- in the app and doubles as an audit trail. changed_by is NULL for the system.
+CREATE TABLE IF NOT EXISTS "Request_History" (
+    history_id   SERIAL PRIMARY KEY,
+    entity_type  VARCHAR(12) NOT NULL CHECK (entity_type IN ('request', 'procurement')),
+    entity_id    INTEGER     NOT NULL,
+    status       VARCHAR(24) NOT NULL,
+    note         TEXT,
+    changed_by   INTEGER REFERENCES "Users"(user_id),
+    changed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS request_history_entity_idx
+    ON "Request_History"(entity_type, entity_id, changed_at);
+>>>>>>> origin/main

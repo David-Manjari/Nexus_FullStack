@@ -1,11 +1,12 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import NotificationBell from "../components/NotificationBell";
 
 export const PAGE_LINKS = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'inventory', label: 'Inventory', roles: ['admin', 'manager', 'store_manager', 'staff'] },
     { id: 'requests', label: 'Requests', roles: ['admin', 'manager', 'store_manager', 'staff'] },
-    { id: 'procurement', label: 'Procurement', roles: ['admin', 'manager', 'store_manager'] },
+    { id: 'procurement', label: 'Procurement', roles: ['store_manager'] },
     { id: 'approvals', label: 'Approvals', roles: ['admin', 'manager'] },
     { id: 'disbursements', label: 'Disbursements', roles: ['admin', 'manager'] },
     { id: 'projects', label: 'Projects', roles: ['admin', 'manager', 'store_manager', 'staff'] },
@@ -41,6 +42,7 @@ export default function Navbar({ currentPage }) {
 
                 {user && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <NotificationBell />
                         <span style={{ color: '#cbd5e1' }}>{user.name}</span>
                         <button type="button" onClick={handleLogout} style={{ padding: '8px 12px', borderRadius: '8px' }}>
                             Logout

@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, request, session
 
-from ..admin_accounts import connect_database
+from ..db import connect_database
 from ..auth import roles_required
 from ..services.approvals import create_approval
 from ..services.request_workflow import (
@@ -22,6 +22,7 @@ from ..services.request_workflow import (
     check_stock,
     convert_to_procurement,
     escalate_request,
+    log_action,
     pick_approver,
     record_event,
 )
@@ -47,12 +48,12 @@ FULFILLABLE_STATUSES = ("pending", "approved")
 MAX_AMOUNT = Decimal("9999999999.99")  # fits NUMERIC(12,2)
 
 REQUEST_SELECT = f"""
-SELECT r.request_id, r.request_type, r.requested_by, u.username AS requester_name,
+SELECT r.request_id, r.request_type, r.requester_id AS requested_by, u.username AS requester_name,
        r.project_id, r.asset_id, r.asset_type, r.item_name, r.category, r.quantity,
        r.amount, r.needed_by, r.reason, r.status, r.escalated_to, r.fulfilled_by,
        r.created_at, r.updated_at
 FROM {REQUESTS} r
-JOIN {USERS} u ON u.user_id = r.requested_by
+JOIN {USERS} u ON u.user_id = r.requester_id
 """
 
 
@@ -111,10 +112,10 @@ def _visibility(role, user_id):
     if role == "admin":
         return "TRUE", ()
     if role == "store_manager":
-        return "(r.request_type = 'asset' OR r.requested_by = %s)", (user_id,)
+        return "(r.request_type = 'asset' OR r.requester_id = %s)", (user_id,)
     if role == "manager":
-        return "(r.requested_by = %s OR r.escalated_to = %s)", (user_id, user_id)
-    return "r.requested_by = %s", (user_id,)
+        return "(r.requester_id = %s OR r.escalated_to = %s)", (user_id, user_id)
+    return "r.requester_id = %s", (user_id,)
 
 
 # ---------------------------------------------------------------------------
@@ -129,50 +130,50 @@ def create_request():
 
     request_type = _text(data, "request_type")
     if request_type not in REQUEST_TYPES:
-        return _error("request_type must be one of: asset, disbursement, project.", 400)
+        return _error("request_type must be one of: asset, disbursement, project.", 422)
 
     reason = _text(data, "reason")
     if reason is None:
-        return _error("A reason is required.", 400)
+        return _error("A reason is required.", 422)
 
     item_name = _text(data, "item_name")
     category = _text(data, "category")
     if (item_name and len(item_name) > 150) or (category and len(category) > 100):
-        return _error("item_name or category is too long.", 400)
+        return _error("item_name or category is too long.", 422)
 
     asset_type = _text(data, "asset_type")
     if asset_type is not None and asset_type not in ASSET_TYPES:
-        return _error("asset_type must be one of: tool, device, vehicle.", 400)
+        return _error("asset_type must be one of: tool, device, vehicle.", 422)
 
     quantity = 1 if data.get("quantity") is None else _int(data.get("quantity"))
-    if quantity is None or quantity < 1:
-        return _error("quantity must be a whole number of at least 1.", 400)
+    if quantity is None or quantity < 1 or quantity > 1_000_000:
+        return _error("quantity must be a whole number from 1 to 1000000.", 422)
 
     needed_by = None
     if data.get("needed_by") is not None:
         needed_by = _date(data.get("needed_by"))
         if needed_by is None:
-            return _error("needed_by must be a date in YYYY-MM-DD format.", 400)
+            return _error("needed_by must be a date in YYYY-MM-DD format.", 422)
 
     asset_id = None
     if data.get("asset_id") is not None:
         asset_id = _int(data.get("asset_id"))
         if asset_id is None:
-            return _error("asset_id must be a number.", 400)
+            return _error("asset_id must be a number.", 422)
 
     project_id = None
     if data.get("project_id") is not None:
         project_id = _int(data.get("project_id"))
         if project_id is None:
-            return _error("project_id must be a number.", 400)
+            return _error("project_id must be a number.", 422)
 
     amount = None
     if request_type == "asset" and asset_id is None and item_name is None:
-        return _error("An asset request needs an item_name or an asset_id.", 400)
+        return _error("An asset request needs an item_name or an asset_id.", 422)
     if request_type == "disbursement":
         amount = _amount(data.get("amount"))
         if amount is None:
-            return _error("A disbursement request needs a positive amount.", 400)
+            return _error("A disbursement request needs a positive amount.", 422)
 
     with connect_database() as connection:
         if asset_id is not None:
@@ -180,13 +181,13 @@ def create_request():
                 f"SELECT asset_type FROM {ASSETS} WHERE asset_id = %s", (asset_id,)
             ).fetchone()
             if asset is None:
-                return _error("That asset does not exist.", 400)
+                return _error("That asset does not exist.", 422)
             asset_type = asset_type or asset["asset_type"]
 
         created = connection.execute(
             f"""
             INSERT INTO {REQUESTS}
-                (request_type, requested_by, project_id, asset_id, asset_type,
+                (request_type, requester_id, project_id, asset_id, asset_type,
                  item_name, category, quantity, amount, needed_by, reason)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING request_id
@@ -196,6 +197,12 @@ def create_request():
         ).fetchone()
         new_id = created["request_id"]
         record_event(connection, "request", new_id, "submitted", "Request submitted.", user_id)
+        log_action(
+            connection, user_id, "request_created", "request", new_id,
+            {"request_type": request_type, "item_name": item_name,
+             "asset_id": asset_id, "quantity": quantity,
+             "amount": str(amount) if amount is not None else None},
+        )
 
         procurement = None
         label = item_name or f"asset #{asset_id}"
@@ -260,9 +267,9 @@ def list_requests():
     status = request.args.get("status")
     request_type = request.args.get("type")
     if status is not None and status not in REQUEST_STATUSES:
-        return _error("Unknown status filter.", 400)
+        return _error("Unknown status filter.", 422)
     if request_type is not None and request_type not in REQUEST_TYPES:
-        return _error("Unknown type filter.", 400)
+        return _error("Unknown type filter.", 422)
 
     conditions, params = _visibility(session["role"], session["user_id"])
     conditions = [conditions]
@@ -314,24 +321,24 @@ def fulfil_request(request_id):
     data = _payload()
     chosen_asset_id = _int(data.get("asset_id")) if data.get("asset_id") is not None else None
     if data.get("asset_id") is not None and chosen_asset_id is None:
-        return _error("asset_id must be a number.", 400)
+        return _error("asset_id must be a number.", 422)
 
     with connect_database() as connection:
         found = connection.execute(
-            f"SELECT request_type, requested_by, asset_id, status FROM {REQUESTS} "
+            f"SELECT request_type, requester_id AS requested_by, asset_id, status FROM {REQUESTS} "
             "WHERE request_id = %s FOR UPDATE",
             (request_id,),
         ).fetchone()
         if found is None:
             return _error("Request not found.", 404)
         if found["request_type"] != "asset":
-            return _error("Only asset requests can be fulfilled this way.", 400)
+            return _error("Only asset requests can be fulfilled this way.", 422)
         if found["status"] not in FULFILLABLE_STATUSES:
             return _error(f"A {found['status']} request cannot be fulfilled.", 409)
 
         asset_id = chosen_asset_id or found["asset_id"]
         if asset_id is None:
-            return _error("Choose an asset to hand over (asset_id).", 400)
+            return _error("Choose an asset to hand over (asset_id).", 422)
 
         asset = connection.execute(
             f"SELECT name, status FROM {ASSETS} WHERE asset_id = %s FOR UPDATE",
@@ -367,6 +374,10 @@ def fulfil_request(request_id):
         record_event(
             connection, "request", request_id, "fulfilled",
             f"Issued: {asset['name']}.", session["user_id"],
+        )
+        log_action(
+            connection, session["user_id"], "request_fulfilled", "request", request_id,
+            {"asset_id": asset_id, "issued_to": found["requested_by"]},
         )
         # TODO: notify the requester once notifications exist.
         row = connection.execute(
