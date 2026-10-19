@@ -4,10 +4,12 @@ Every function takes an open database connection and runs inside the caller's
 transaction, so a request and its follow-up changes are saved or undone together.
 """
 
+from psycopg.types.json import Jsonb
+
 REQUESTS = '"Requests"'
 ASSETS = '"Assets"'
 USERS = '"Users"'
-PROCUREMENT = '"Procurement"'
+PROCUREMENT = '"Procurements"'
 HISTORY = '"Request_History"'
 
 # Who a request is escalated to, by the role of the person who raised it.
@@ -20,7 +22,7 @@ APPROVER_ROLE = {
 }
 
 PROCUREMENT_COLUMNS = (
-    "procurement_id, request_id, raised_by, item_name, asset_type, category, "
+    "procurement_id, request_id, requested_by AS raised_by, item_name, asset_type, category, "
     "quantity, estimated_cost, supplier, reason, status, created_at, updated_at"
 )
 
@@ -68,6 +70,38 @@ def attach_history(connection, entity_type, rows, id_key):
     for row in rows:
         row["history"] = history[row[id_key]]
     return rows
+
+
+def log_action(connection, user_id, action, entity_type, entity_id, details=None):
+    """Write one line to the audit log: who did what, to which record, and when."""
+    connection.execute(
+        'INSERT INTO "Audit_Log" (user_id, action, entity_type, entity_id, details) '
+        "VALUES (%s, %s, %s, %s, %s)",
+        (user_id, action, entity_type, entity_id, Jsonb(details or {})),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Inventory
+# ---------------------------------------------------------------------------
+def find_inventory_item(connection, *, asset_id=None, item_name=None):
+    """Return the inventory (Assets) row for an asset id or an exact item name.
+
+    The name match ignores capitals and surrounding spaces. Returns None when
+    the item is not in the inventory table.
+    """
+    if asset_id is not None:
+        return connection.execute(
+            f"SELECT asset_id, name, category, asset_type FROM {ASSETS} WHERE asset_id = %s",
+            (asset_id,),
+        ).fetchone()
+    if item_name:
+        return connection.execute(
+            f"""SELECT asset_id, name, category, asset_type FROM {ASSETS}
+                WHERE lower(btrim(name)) = lower(btrim(%s)) ORDER BY asset_id LIMIT 1""",
+            (item_name,),
+        ).fetchone()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -191,9 +225,9 @@ def convert_to_procurement(
     procurement = connection.execute(
         f"""
         INSERT INTO {PROCUREMENT}
-            (request_id, raised_by, item_name, asset_type, category, quantity,
-             estimated_cost, supplier, reason)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (request_id, requested_by, item_name, asset_type, category, quantity,
+             estimated_cost, supplier, reason, status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft')
         RETURNING {PROCUREMENT_COLUMNS}
         """,
         (request_id, raised_by, values["item_name"], values["asset_type"],
@@ -209,4 +243,10 @@ def convert_to_procurement(
         f"Created from request {request_id}.", actor_id,
     )
     record_event(connection, "request", request_id, "converted", request_note, actor_id)
+    log_action(
+        connection, actor_id if actor_id is not None else raised_by,
+        "procurement_created", "procurement", procurement["procurement_id"],
+        {"request_id": request_id, "item_name": values["item_name"],
+         "quantity": values["quantity"], "source": "request"},
+    )
     return procurement
