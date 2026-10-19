@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request, session
 
 from ..db import connect_database
 from ..auth import roles_required
+from ..services.approvals import create_approval
 from ..services.request_workflow import (
     attach_history,
     check_stock,
@@ -204,6 +205,7 @@ def create_request():
         )
 
         procurement = None
+        label = item_name or f"asset #{asset_id}"
         if request_type == "asset":
             # Not in the store? Start a procurement draft automatically.
             stock = check_stock(
@@ -214,6 +216,13 @@ def create_request():
                 record_event(
                     connection, "request", new_id, "pending",
                     "Item available. Sent to the store manager.",
+                )
+                create_approval(
+                    connection,
+                    "equipment_assignment",
+                    user_id,
+                    f"Request #{new_id}: {quantity} x {label}"[:500],
+                    reference_id=new_id,
                 )
             else:
                 procurement = convert_to_procurement(
@@ -230,6 +239,15 @@ def create_request():
                     connection, "request", new_id, "pending",
                     "Waiting for an approver to be available.",
                 )
+            if request_type == "disbursement":
+                summary = f"Request #{new_id}: KES {amount:,.2f} - {reason}"
+                approval_type = "disbursement"
+            else:
+                summary = f"Request #{new_id}: project support - {reason}"
+                approval_type = "escalation"
+            create_approval(
+                connection, approval_type, user_id, summary[:500], reference_id=new_id,
+            )
 
         # TODO: notify the approver / store manager once notifications exist.
         row = connection.execute(

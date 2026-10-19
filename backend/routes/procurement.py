@@ -21,6 +21,7 @@ from flask import Blueprint, jsonify, request, session
 
 from ..auth import roles_required
 from ..db import connect_database
+from ..services.approvals import create_approval
 from ..services.request_workflow import (
     attach_history,
     convert_to_procurement,
@@ -385,10 +386,21 @@ def update_procurement(procurement_id):
                 connection, user_id, audit_action, "procurement", procurement_id,
                 {"from": current["status"], "to": new_status},
             )
-        # TODO (tasks T8 and the approval chain): on submit, check
-        # services.approvals.has_viewed_pending() and open the approval with
-        # services.approvals.create_approval(). Wire this in once the shared
-        # schema defines the Approvals / Approval_Views tables that module needs.
+        if action == "submit":
+            item = connection.execute(
+                f"SELECT item_name, quantity, estimated_cost FROM {PROCUREMENT} "
+                "WHERE procurement_id = %s",
+                (procurement_id,),
+            ).fetchone()
+            create_approval(
+                connection,
+                "equipment_procurement",
+                user_id,
+                f"Procurement #{procurement_id}: {item['quantity']} x {item['item_name']}, "
+                f"estimated KES {item['estimated_cost']:,.2f}"[:500],
+                reference_id=procurement_id,
+            )
+        # TODO: notify the approver once notifications exist.
         row = connection.execute(
             f"{PROCUREMENT_SELECT} WHERE p.procurement_id = %s", (procurement_id,)
         ).fetchone()

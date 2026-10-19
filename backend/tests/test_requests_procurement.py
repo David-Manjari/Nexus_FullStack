@@ -77,6 +77,11 @@ def world(app):
             '(SELECT procurement_id FROM "Procurements" WHERE requested_by = ANY(%s))',
             (ids,),
         )
+        connection.execute(
+            'DELETE FROM "Approval_Items" WHERE requested_by = ANY(%s) '
+            'OR decided_by = ANY(%s)',
+            (ids, ids),
+        )
         connection.execute('DELETE FROM "Audit_Log" WHERE user_id = ANY(%s)', (ids,))
         connection.execute('DELETE FROM "Asset_Assignments" WHERE user_id = ANY(%s)', (ids,))
         connection.execute('DELETE FROM "Procurements" WHERE requested_by = ANY(%s)', (ids,))

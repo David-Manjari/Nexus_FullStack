@@ -14,7 +14,7 @@ Flask-JWT-Extended==4.6.0
 Flask-Login==0.6.3
 Flask-Migrate==4.1.0
 Flask-SQLAlchemy==3.1.1
-greenlet==3.5.6
+greenlet==3.1.1
 idna==3.15
 importlib_metadata==8.5.0
 importlib_resources==6.4.5
@@ -26,8 +26,8 @@ MarkupSafe==2.1.5
 marshmallow==3.22.0
 packaging==26.2
 pluggy==1.5.0
-psycopg==3.2.13
-psycopg-binary==3.2.13
+psycopg==3.1.18
+psycopg-binary==3.1.18
 PyJWT==2.9.0
 pytest==8.3.5
 python-dotenv==1.0.1
