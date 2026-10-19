@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request, session
 
 from ..admin_accounts import connect_database
 from ..auth import roles_required
+from ..services.approvals import create_approval
 from ..services.request_workflow import (
     attach_history,
     convert_to_procurement,
@@ -286,8 +287,21 @@ def update_procurement(procurement_id):
             )
         if new_status:
             record_event(connection, "procurement", procurement_id, new_status, note, user_id)
-        # TODO: on submit, create the approval record (Member 5) and notify the
-        # approver once those exist.
+        if action == "submit":
+            item = connection.execute(
+                f"SELECT item_name, quantity, estimated_cost FROM {PROCUREMENT} "
+                "WHERE procurement_id = %s",
+                (procurement_id,),
+            ).fetchone()
+            create_approval(
+                connection,
+                "equipment_procurement",
+                user_id,
+                f"Procurement #{procurement_id}: {item['quantity']} x {item['item_name']}, "
+                f"estimated KES {item['estimated_cost']:,.2f}"[:500],
+                reference_id=procurement_id,
+            )
+        # TODO: notify the approver once notifications exist.
         row = connection.execute(
             f"{PROCUREMENT_SELECT} WHERE p.procurement_id = %s", (procurement_id,)
         ).fetchone()
