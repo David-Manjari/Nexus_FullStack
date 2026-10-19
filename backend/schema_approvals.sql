@@ -1,8 +1,10 @@
--- Approvals (Member: approvals). Give this to the database owner to merge into schema.sql.
--- ASSUMPTION: "Users".user_id is an integer primary key.
+-- Approval inbox (approvals module). Give this to the database owner to merge into schema.sql.
+-- The names "Approvals" and "Approval_Requests" are already used by the procurement and
+-- project approval chains, so this module uses "Approval_Items".
+-- Needs the existing "Users" table (user_id) and "Audit_Log" table.
 -- request_type is validated in code (REQUEST_TYPES in services/approvals.py).
 
-CREATE TABLE IF NOT EXISTS "Approvals" (
+CREATE TABLE IF NOT EXISTS "Approval_Items" (
     approval_id      SERIAL PRIMARY KEY,
     request_type     VARCHAR(30)  NOT NULL,
     reference_id     INTEGER,
@@ -19,22 +21,11 @@ CREATE TABLE IF NOT EXISTS "Approvals" (
            OR (decision_reason IS NOT NULL AND length(btrim(decision_reason)) > 0))
 );
 
-CREATE INDEX IF NOT EXISTS approvals_pending_idx
-    ON "Approvals"(request_type, created_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS approval_items_pending_idx
+    ON "Approval_Items"(request_type, created_at) WHERE status = 'pending';
 
 -- Remembers that a user has opened the pending list (task T8).
 CREATE TABLE IF NOT EXISTS "Approval_Views" (
     user_id    INTEGER PRIMARY KEY REFERENCES "Users"(user_id) ON DELETE CASCADE,
     viewed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Skip this table if the shared schema already defines Audit_Log.
-CREATE TABLE IF NOT EXISTS "Audit_Log" (
-    audit_id     SERIAL PRIMARY KEY,
-    user_id      INTEGER REFERENCES "Users"(user_id) ON DELETE SET NULL,
-    action       VARCHAR(100) NOT NULL,
-    entity_type  VARCHAR(50),
-    entity_id    INTEGER,
-    details      JSONB,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
