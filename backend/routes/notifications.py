@@ -7,7 +7,7 @@ from ..db import connect_database
 
 
 notifications_bp = Blueprint("notifications", __name__)
-READ_ROLES = ("admin", "manager", "store_manager", "staff")
+READ_ROLES = ("admin", "manager", "staff")
 
 
 @notifications_bp.get("")

@@ -25,7 +25,7 @@ Nexus is intended to give:
 - Procurement request creation, editing of drafts, and escalation for approval.
 - An approvals queue with approve/reject actions and optional comments.
 - A disbursement queue with pending, processing, paid, and failed states.
-- Notifications page and notification bell, with read/unread state.
+- Notifications page and notification bell, with read/unread state, escalation alerts for approvers, and decision updates for requesters.
 - Admin pages for user and role administration.
 - Loading, empty, unauthorized, and error states in relevant workflows.
 
@@ -35,13 +35,13 @@ Nexus is intended to give:
 | --- | --- | --- |
 | `/login` | Demo sign-in | Public |
 | `/dashboard` | Operations dashboard | Signed-in users |
-| `/inventory/tools` | Tools inventory | Manager, admin |
-| `/inventory/devices` | Devices inventory | Manager, admin |
-| `/inventory/vehicles` | Vehicles inventory | Manager, admin |
+| `/inventory/tools` | Tools inventory | Manager, admin (manage: manager) |
+| `/inventory/devices` | Devices inventory | Manager, admin (manage: manager) |
+| `/inventory/vehicles` | Vehicles inventory | Manager, admin (manage: manager) |
 | `/requests` | My requests | Staff, admin |
 | `/requests/new` | Submit an item request | Staff, admin |
-| `/procurement` | Procurement queue | Manager, admin |
-| `/procurement/new` | Create a procurement request | Manager, admin |
+| `/procurement` | Procurement queue | Manager |
+| `/procurement/new` | Create a procurement request | Manager |
 | `/approvals` | Review approval items | Signed-in users |
 | `/disbursements` | Manage payout statuses | Signed-in users |
 | `/notifications` | View notifications | Signed-in users |

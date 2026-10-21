@@ -13,7 +13,7 @@ export async function getUsers() {
 }
 
 export async function getAssignableUsers() {
-  // Store managers use a separate route because the backend limits asset assignment by role.
+  // Managers use this route to find users when assigning assets.
   const { users } = await apiRequest("/users/assignable");
   return users.map((user) => ({
     id: user.user_id,

@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 
 from ..db import connect_database
 from ..auth import roles_required
+from ..services.notifications import create_notification
 
 assets_bp = Blueprint("assets", __name__)
 assignments_bp = Blueprint("assignments", __name__)
@@ -30,8 +31,8 @@ VEHICLES = '"Vehicle_Details"'
 ASSIGNMENTS = '"Asset_Assignments"'
 USERS = '"Users"'
 
-WRITE_ROLES = ("store_manager",)
-READ_ROLES = ("admin", "manager", "store_manager", "staff")
+WRITE_ROLES = ("manager",)
+READ_ROLES = ("admin", "manager", "staff")
 
 ASSET_TYPES = {"tool", "device", "vehicle"}
 EDITABLE_STATUSES = {"available", "maintenance", "retired"}  # "assigned" only via /assign
@@ -122,14 +123,6 @@ def _audit(connection, action, asset_id, details=None):
         'INSERT INTO "Audit_Log" (user_id, action, entity_type, entity_id, details) '
         "VALUES (%s, %s, 'asset', %s, %s)",
         (session["user_id"], action, asset_id, Jsonb(details or {})),
-    )
-
-
-def _notify(connection, user_id, message, notif_type="asset_assigned"):
-    """Insert an in-app notification. Swap for services.notifications once it exists."""
-    connection.execute(
-        'INSERT INTO "Notifications" (user_id, message, notif_type) VALUES (%s, %s, %s)',
-        (user_id, message, notif_type),
     )
 
 
@@ -409,7 +402,9 @@ def assign_asset(asset_id):
             connection, "asset_assigned", asset_id,
             {"assigned_to": user_id, "assignment_id": assignment_id, "request_id": request_id},
         )
-        _notify(connection, user_id, f"You were assigned: {asset['name']}.")
+        create_notification(
+            connection, user_id, f"You were assigned: {asset['name']}.", "asset_assigned"
+        )
 
     return jsonify(message="Asset assigned.", assignment_id=assignment_id), 201
 

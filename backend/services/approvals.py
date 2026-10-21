@@ -6,6 +6,8 @@ call create_approval() inside their own transaction when they need a decision.
 
 from psycopg.types.json import Jsonb
 
+from .notifications import create_notification
+
 APPROVALS = '"Approval_Items"'
 USERS = '"Users"'
 VIEWS = '"Approval_Views"'
@@ -20,10 +22,8 @@ REQUEST_TYPES = (
 )
 
 # Task T5: which roles see which request types.
-#   store manager: equipment assignment and equipment procurement
 #   admin, manager: everything except tool assignment
 ROLE_VISIBILITY = {
-    "store_manager": ("equipment_assignment", "equipment_procurement"),
     "admin": tuple(t for t in REQUEST_TYPES if t != "tool_assignment"),
     "manager": tuple(t for t in REQUEST_TYPES if t != "tool_assignment"),
 }
@@ -124,13 +124,20 @@ def decide(connection, approval_id, user_id, role, decision, reason=None):
 
 
 def _after_decision(connection, approval):
-    """Hook for the notifications module (tasks T2, T3).
-
-    When the notifications table exists, create the requester's notification here,
-    for example when an 'escalation' is approved:
-        create_notification(connection, user_id=approval["requested_by"], ...)
-    """
-    return None
+    """Notify the requester when an approval is approved or rejected."""
+    request_type = approval["request_type"].replace("_", " ")
+    reference_id = approval["reference_id"]
+    reference = f" #{reference_id}" if reference_id is not None else ""
+    message = f"Your {request_type} request{reference} was {approval['status']}."
+    reason = approval["decision_reason"]
+    if reason:
+        message += f" Reason: {reason}"
+    create_notification(
+        connection,
+        approval["requested_by"],
+        message,
+        "approval_decision",
+    )
 
 
 def record_view(connection, user_id):
@@ -143,7 +150,7 @@ def record_view(connection, user_id):
 
 
 def has_viewed_pending(connection, user_id):
-    """Task T8: the procurement module calls this before letting a store manager send a request."""
+    """Record that a manager has reviewed the pending approvals list."""
     row = connection.execute(
         f"SELECT 1 AS seen FROM {VIEWS} WHERE user_id = %s", (user_id,)
     ).fetchone()

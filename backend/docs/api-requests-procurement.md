@@ -8,12 +8,12 @@ Paths have no `/api` prefix, matching the other routes in this repo (`/session`,
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| POST | `/requests` | admin, manager, store_manager, staff | Raise a request |
-| GET | `/requests` | admin, manager, store_manager, staff | List the requests you may see. Filters: `?status=`, `?type=` |
-| GET | `/requests/<id>` | admin, manager, store_manager, staff | One request (404 if you may not see it) |
-| PATCH | `/requests/<id>/fulfil` | store_manager, admin | Hand an available asset to the requester |
+| POST | `/requests` | admin, manager, staff | Raise a request |
+| GET | `/requests` | admin, manager, staff | List the requests you may see. Filters: `?status=`, `?type=` |
+| GET | `/requests/<id>` | admin, manager, staff | One request (404 if you may not see it) |
+| PATCH | `/requests/<id>/fulfil` | manager, admin | Hand an available asset to the requester |
 
-**Who sees what:** staff see their own requests. Managers see their own plus those escalated to them. Store managers see every asset request plus their own. Admins see everything.
+**Who sees what:** staff see their own requests. Managers see their own, those escalated to them, and every asset request. Admins see everything.
 
 ### POST /requests
 
@@ -35,9 +35,9 @@ Response `201`: `{"request": {...}, "procurement": {...} or null}`
 Every request and procurement in a response carries a `history` list, oldest first: `[{"status", "note", "by", "at"}]`. It is the status timeline shown in the app and also serves as an audit trail. A request also shows `requested_by`, `requester_name`, `asset_type` and `needed_by`.
 
 What happens next:
-- **Asset request, item in stock:** status `pending`, `procurement` is `null`. A store manager fulfils it.
+- **Asset request, item in stock:** status `pending`, `procurement` is `null`. A manager fulfils it.
 - **Asset request, item not in stock:** a draft procurement is created automatically, the request becomes `converted`, and `procurement` holds the draft.
-- **Disbursement or project request:** escalated to the approver with the fewest open requests. Staff and store managers go to a manager, managers and admins go to an admin (never to themselves). With no approver available the status stays `pending`.
+- **Disbursement or project request:** escalated to the approver with the fewest open requests. Staff go to a manager, managers and admins go to an admin (never to themselves). With no approver available the status stays `pending`.
 
 ### PATCH /requests/<id>/fulfil
 
@@ -49,15 +49,15 @@ Request statuses: `pending`, `escalated`, `approved`, `rejected`, `fulfilled`, `
 
 ## Procurements
 
-Procurement is for the **store manager only**. Every other role gets `403`, whatever the page shows.
+Procurement is for **managers only**. Other roles get `403`, whatever the page shows.
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| GET | `/procurements` | store_manager | List. Filter: `?status=` |
-| GET | `/procurements/open` | store_manager | Procurements that are still unapproved and unpaid |
-| GET | `/procurements/<id>` | store_manager | One procurement |
-| POST | `/procurements` | store_manager | Create a draft, directly or from a request |
-| PATCH | `/procurements/<id>` | store_manager | Edit a draft and/or move it along |
+| GET | `/procurements` | manager | List. Filter: `?status=` |
+| GET | `/procurements/open` | manager | Procurements that are still unapproved and unpaid |
+| GET | `/procurements/<id>` | manager | One procurement |
+| POST | `/procurements` | manager | Create a draft, directly or from a request |
+| PATCH | `/procurements/<id>` | manager | Edit a draft and/or move it along |
 
 ### POST /procurements
 

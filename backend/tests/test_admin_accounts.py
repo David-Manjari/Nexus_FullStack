@@ -5,6 +5,17 @@ import pytest
 from backend import admin_accounts
 
 
+def test_store_manager_is_not_a_supported_role():
+    with pytest.raises(ValueError, match="Role must be one of: admin, manager, staff"):
+        admin_accounts.create_account(
+            1,
+            "old-role",
+            "old-role@example.com",
+            "safe-password",
+            "store_manager",
+        )
+
+
 class FakeResult:
     def __init__(self, row=None):
         self.row = row

@@ -231,7 +231,7 @@ function ProjectCard({ project, user, assignableUsers, assignableUsersLoading, o
                         onChange={(event) => setTeam({ ...team, managerId: event.target.value })}
                       >
                         <option value="">Unassigned</option>
-                        {assignableUsers.filter((member) => member.role !== "store_manager").map((member) => (
+                        {assignableUsers.map((member) => (
                           <option key={member.id} value={member.id}>{member.name} ({member.role})</option>
                         ))}
                       </select>

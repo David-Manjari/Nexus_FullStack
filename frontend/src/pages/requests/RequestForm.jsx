@@ -96,7 +96,7 @@ export default function RequestForm() {
         <div className={`rq-banner ${result.status === "procurement" ? "rq-banner--warn" : "rq-banner--ok"}`}>
           {result.status === "procurement"
             ? `${result.itemName} is not available right now, so a procurement request was raised for you.`
-            : `Request for ${result.itemName} sent to the store manager.`}{" "}
+            : `Request for ${result.itemName} sent to a manager.`}{" "}
           <Link to="/requests">View my requests</Link>
         </div>
       )}
@@ -136,7 +136,7 @@ export default function RequestForm() {
         {selected && (
           <p className={`rq-availability ${selected.status === "available" ? "is-available" : "is-unavailable"}`}>
             {selected.status === "available"
-              ? "Available. Your request will go to the store manager."
+              ? "Available. Your request will go to a manager."
               : `Unavailable (${selected.status}). Submitting will raise a procurement request.`}
           </p>
         )}

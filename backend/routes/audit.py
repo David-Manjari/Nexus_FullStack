@@ -1,6 +1,6 @@
 """Role-protected company audit API."""
 
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify
 
 from ..auth import roles_required
 from ..services.audit import (
@@ -13,7 +13,7 @@ from ..services.audit import (
 
 audit_bp = Blueprint("audit", __name__)
 AUDIT_ROLES = ("admin", "manager")
-PROCUREMENT_ROLES = (*AUDIT_ROLES, "store_manager")
+PROCUREMENT_ROLES = AUDIT_ROLES
 
 
 def _schema_not_configured(error):
@@ -25,19 +25,14 @@ def _schema_not_configured(error):
 def company_audit():
     """Return card data for the company audit dashboard.
 
-    Store managers receive procurement data only. Admins and managers receive
-    project, disbursement, and procurement cards.
+    Admins and managers receive project, disbursement, and procurement cards.
     """
-    role = session["role"]
     try:
-        if role == "store_manager":
-            cards = {"procurement": get_procurement_audit()}
-        else:
-            cards = {
-                "projects": get_project_audit(),
-                "disbursements": get_disbursement_audit(),
-                "procurement": get_procurement_audit(),
-            }
+        cards = {
+            "projects": get_project_audit(),
+            "disbursements": get_disbursement_audit(),
+            "procurement": get_procurement_audit(),
+        }
     except AuditSchemaNotConfigured as error:
         return _schema_not_configured(error)
 

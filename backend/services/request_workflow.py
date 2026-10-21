@@ -13,10 +13,9 @@ PROCUREMENT = '"Procurements"'
 HISTORY = '"Request_History"'
 
 # Who a request is escalated to, by the role of the person who raised it.
-# Staff and store managers go to a manager; managers and admins go to an admin.
+# Staff go to a manager; managers and admins go to an admin.
 APPROVER_ROLE = {
     "staff": "manager",
-    "store_manager": "manager",
     "manager": "admin",
     "admin": "admin",
 }
@@ -150,7 +149,7 @@ def pick_approver(connection, requester_role, requester_id):
         SELECT u.user_id
         FROM {USERS} u
         LEFT JOIN {REQUESTS} r ON r.escalated_to = u.user_id AND r.status = 'escalated'
-        WHERE u.role = %s AND u.user_id <> %s
+        WHERE u.role = %s AND u.is_active = TRUE AND u.user_id <> %s
         GROUP BY u.user_id
         ORDER BY COUNT(r.request_id), u.user_id
         LIMIT 1

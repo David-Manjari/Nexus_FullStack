@@ -20,7 +20,7 @@ from ..services.workflow import (
 
 
 projects_bp = Blueprint("projects", __name__)
-PROJECT_ROLES = ("admin", "manager", "store_manager", "staff")
+PROJECT_ROLES = ("admin", "manager", "staff")
 
 
 def _payload():

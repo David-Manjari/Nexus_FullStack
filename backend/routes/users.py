@@ -23,9 +23,9 @@ def _payload():
 
 
 @users_bp.get("/assignable")
-@roles_required("store_manager")
+@roles_required("manager")
 def assignable_users():
-    """List active users for the store manager's asset assignment form."""
+    """List active users for managers assigning inventory."""
     with connect_database() as connection:
         users = connection.execute(
             '''SELECT user_id, username, role FROM "Users"

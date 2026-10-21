@@ -17,7 +17,7 @@ export const PROCUREMENT_STATUS = {
 
 export const STATUS_LABELS = {
   submitted: "Submitted",
-  pending: "Waiting for store manager",
+  pending: "Waiting for manager",
   issued: "Issued",
   declined: "Declined",
   procurement: "Sent to procurement",
@@ -54,7 +54,7 @@ export const requests = [
     createdAt: "2026-10-01T09:00:00Z",
     history: [
       { status: "submitted", note: "Request submitted", by: "Procurement Staff", at: "2026-10-01T09:00:00Z" },
-      { status: "pending", note: "Item available. Sent to store manager.", by: "System", at: "2026-10-01T09:00:00Z" },
+      { status: "pending", note: "Item available. Sent to a manager.", by: "System", at: "2026-10-01T09:00:00Z" },
     ],
   },
   {

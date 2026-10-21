@@ -1,8 +1,8 @@
 """Request routes: staff and managers ask for assets, money or project support.
 
 Anyone signed in can raise a request and see their own. Managers also see the
-requests escalated to them, store managers see every asset request, and admins
-see everything. Only store managers and admins can fulfil an asset request.
+requests escalated to them and every asset request; admins see everything.
+Only managers and admins can fulfil an asset request.
 Every response includes the request's history (the status timeline).
 
 Register in app.py:
@@ -17,6 +17,7 @@ from flask import Blueprint, jsonify, request, session
 from ..db import connect_database
 from ..auth import roles_required
 from ..services.approvals import create_approval
+from ..services.notifications import create_notification
 from ..services.request_workflow import (
     attach_history,
     check_stock,
@@ -34,9 +35,9 @@ ASSETS = '"Assets"'
 ASSIGNMENTS = '"Asset_Assignments"'
 USERS = '"Users"'
 
-CREATE_ROLES = ("admin", "manager", "store_manager", "staff")
-VIEW_ROLES = ("admin", "manager", "store_manager", "staff")
-FULFIL_ROLES = ("store_manager", "admin")
+CREATE_ROLES = ("admin", "manager", "staff")
+VIEW_ROLES = ("admin", "manager", "staff")
+FULFIL_ROLES = ("manager", "admin")
 
 REQUEST_TYPES = {"asset", "disbursement", "project"}
 ASSET_TYPES = {"tool", "device", "vehicle"}
@@ -111,10 +112,11 @@ def _visibility(role, user_id):
     """SQL condition (and params) limiting which requests this role may see."""
     if role == "admin":
         return "TRUE", ()
-    if role == "store_manager":
-        return "(r.request_type = 'asset' OR r.requester_id = %s)", (user_id,)
     if role == "manager":
-        return "(r.requester_id = %s OR r.escalated_to = %s)", (user_id, user_id)
+        return (
+            "(r.request_type = 'asset' OR r.requester_id = %s OR r.escalated_to = %s)",
+            (user_id, user_id),
+        )
     return "r.requester_id = %s", (user_id,)
 
 
@@ -215,7 +217,7 @@ def create_request():
             if stock["available"]:
                 record_event(
                     connection, "request", new_id, "pending",
-                    "Item available. Sent to the store manager.",
+                    "Item available. Sent to a manager.",
                 )
                 create_approval(
                     connection,
@@ -234,6 +236,12 @@ def create_request():
             approver_id = pick_approver(connection, session["role"], user_id)
             if approver_id is not None:
                 escalate_request(connection, new_id, approver_id)
+                create_notification(
+                    connection,
+                    approver_id,
+                    f"New {request_type} request #{new_id} needs your review.",
+                    "request_escalated",
+                )
             else:
                 record_event(
                     connection, "request", new_id, "pending",
@@ -249,7 +257,6 @@ def create_request():
                 connection, approval_type, user_id, summary[:500], reference_id=new_id,
             )
 
-        # TODO: notify the approver / store manager once notifications exist.
         row = connection.execute(
             f"{REQUEST_SELECT} WHERE r.request_id = %s", (new_id,)
         ).fetchone()
@@ -316,7 +323,7 @@ def fulfil_request(request_id):
 
     Body (optional): {"asset_id": 12}. If omitted, the asset named on the
     request is used. If the asset is not available the request is left alone,
-    so the store manager can convert it into a procurement instead.
+    so a manager can convert it into a procurement instead.
     """
     data = _payload()
     chosen_asset_id = _int(data.get("asset_id")) if data.get("asset_id") is not None else None

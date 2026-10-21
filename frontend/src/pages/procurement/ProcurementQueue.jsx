@@ -11,7 +11,7 @@ const formatKes = (value) => (value ? `KES ${Number(value).toLocaleString()}` : 
 
 export default function ProcurementQueue() {
   const { user } = useAuth();
-  const canCreate = user?.role === "admin" || user?.role === "store_manager";
+  const canCreate = user?.role === "manager";
   const [procurements, setProcurements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

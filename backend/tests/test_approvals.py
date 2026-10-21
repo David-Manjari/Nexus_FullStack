@@ -25,7 +25,7 @@ pytestmark = pytest.mark.skipif(
     not os.environ.get("DATABASE_URL"), reason="DATABASE_URL is not set"
 )
 
-ROLES = ("admin", "manager", "store_manager", "staff")
+ROLES = ("admin", "manager", "staff")
 MISSING_ID = 2_000_000_000
 
 
@@ -134,7 +134,6 @@ def test_each_role_sees_only_its_own_request_types(people):
         }
 
     everything_but_tools = set(REQUEST_TYPES) - {"tool_assignment"}
-    assert seen("store_manager") == {"equipment_assignment", "equipment_procurement"}
     assert seen("admin") == everything_but_tools
     assert seen("manager") == everything_but_tools
 
@@ -172,6 +171,22 @@ def test_approving_records_who_and_when(people):
     assert row["status"] == "approved"
     assert row["decided_by"] == people["ids"]["manager"]
     assert row["decided_at"] is not None
+    with connect_database() as connection:
+        notification = connection.execute(
+            'SELECT message, notif_type FROM "Notifications" WHERE user_id = %s '
+            "ORDER BY notification_id DESC LIMIT 1",
+            (people["ids"]["staff"],),
+        ).fetchone()
+    assert notification["notif_type"] == "approval_decision"
+    assert "equipment assignment request #1 was approved" in notification["message"]
+    visible_notifications = people["clients"]["staff"].get("/notifications").get_json()[
+        "notifications"
+    ]
+    assert any(
+        item["notif_type"] == "approval_decision"
+        and "was approved" in item["message"]
+        for item in visible_notifications
+    )
 
 
 def test_rejecting_requires_a_reason(people):
@@ -187,6 +202,13 @@ def test_rejecting_requires_a_reason(people):
     row = _row(approval_id)
     assert row["status"] == "rejected"
     assert row["decision_reason"] == "Over budget"
+    with connect_database() as connection:
+        notification = connection.execute(
+            'SELECT message FROM "Notifications" WHERE user_id = %s '
+            "ORDER BY notification_id DESC LIMIT 1",
+            (people["ids"]["staff"],),
+        ).fetchone()
+    assert "was rejected. Reason: Over budget" in notification["message"]
 
 
 @pytest.mark.parametrize("body", [{}, {"decision": "maybe"}, {"decision": 5}])
@@ -220,9 +242,9 @@ def test_roles_cannot_decide_types_they_do_not_see(people):
     escalation = _make(people, "escalation")
     tool = _make(people, "tool_assignment")
 
-    assert _decide(people["clients"]["store_manager"], escalation, decision="approved").status_code == 403
+    assert _decide(people["clients"]["manager"], escalation, decision="approved").status_code == 200
     assert _decide(people["clients"]["admin"], tool, decision="approved").status_code == 403
-    assert _row(escalation)["status"] == "pending"
+    assert _row(escalation)["status"] == "approved"
     assert _row(tool)["status"] == "pending"
 
 
@@ -231,7 +253,7 @@ def test_unknown_approval_returns_404(people):
 
 
 # ---------------------------------------------------------------------------
-# Audit log (T20) and the store manager's view (T8)
+# Audit log (T20) and the manager's view (T8)
 # ---------------------------------------------------------------------------
 def test_requests_and_decisions_are_audited(people):
     approved, rejected = _make(people), _make(people)
@@ -258,18 +280,18 @@ def test_requests_and_decisions_are_audited(people):
     ]
 
 
-def test_store_manager_opening_the_list_is_recorded(people):
-    store_id = people["ids"]["store_manager"]
+def test_manager_opening_the_list_is_recorded(people):
+    manager_id = people["ids"]["manager"]
     with connect_database() as connection:
-        assert has_viewed_pending(connection, store_id) is False
+        assert has_viewed_pending(connection, manager_id) is False
 
     people["clients"]["admin"].get("/approvals/pending")
     with connect_database() as connection:
-        assert has_viewed_pending(connection, store_id) is False
+        assert has_viewed_pending(connection, manager_id) is False
 
-    people["clients"]["store_manager"].get("/approvals/pending")
+    people["clients"]["manager"].get("/approvals/pending")
     with connect_database() as connection:
-        assert has_viewed_pending(connection, store_id) is True
+        assert has_viewed_pending(connection, manager_id) is True
 
 
 # ---------------------------------------------------------------------------

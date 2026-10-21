@@ -33,10 +33,10 @@ import RequestForm from "./pages/requests/RequestForm";
 import ProcurementQueue from "./pages/procurement/ProcurementQueue";
 import ProcurementForm from "./pages/procurement/ProcurementForm";
 
-const ALL_ROLES = ["admin", "manager", "store_manager", "staff"];
+const ALL_ROLES = ["admin", "manager", "staff"];
 const APPROVER_ROLES = ["admin", "manager"];
-const PROCUREMENT_READ_ROLES = ["store_manager"];
-const PROCUREMENT_WRITE_ROLES = ["store_manager"];
+const PROCUREMENT_READ_ROLES = ["manager"];
+const PROCUREMENT_WRITE_ROLES = ["manager"];
 
 
 function getActivePage(pathname) {

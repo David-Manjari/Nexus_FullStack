@@ -33,7 +33,7 @@ def pending_approvals():
     """Pending approvals for the signed-in user's role only."""
     with connect_database() as connection:
         approvals = list_pending(connection, session["role"])
-        if session["role"] == "store_manager":
+        if session["role"] == "manager":
             record_view(connection, session["user_id"])
     return jsonify(approvals=approvals), 200
 

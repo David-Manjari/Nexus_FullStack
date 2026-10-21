@@ -1,7 +1,7 @@
 """Procurement routes: buying items the store does not have.
 
-Only the store manager can see or use these endpoints (tasks T9, T16): the
-server checks the role on every call, whatever the page shows. A procurement
+Only managers can see or use these endpoints: the server checks the role on
+every call, whatever the page shows. A procurement
 starts as a draft (often created automatically from an unavailable asset
 request), is filled in, then submitted for approval. Items must already exist
 in the inventory (T11). Every response includes the procurement's history (the
@@ -37,9 +37,8 @@ REQUESTS = '"Requests"'
 USERS = '"Users"'
 DISBURSEMENTS = '"Disbursements"'
 
-# Task T9: the page and the create action belong to the store manager only.
-READ_ROLES = ("store_manager",)
-WRITE_ROLES = ("store_manager",)
+READ_ROLES = ("manager",)
+WRITE_ROLES = ("manager",)
 
 PROCUREMENT_STATUSES = {
     "draft", "pending", "pending_approval", "level_1", "level_2",
@@ -246,7 +245,7 @@ def create_procurement():
                     return _invalid("Only asset requests can become a procurement.")
                 if found["status"] not in CONVERTIBLE_REQUEST_STATUSES:
                     return _error(f"A {found['status']} request cannot be converted.", 409)
-                # The item is whatever the store manager names, else the request's own.
+                # The item is whatever the manager names, else the request's own.
                 if asset_id is None and "item_name" not in fields:
                     asset_id = found["asset_id"]
                 item_name = fields.get("item_name") or found["item_name"]
@@ -264,7 +263,7 @@ def create_procurement():
             if request_id is not None:
                 created = convert_to_procurement(
                     connection, request_id, raised_by=user_id, actor_id=user_id,
-                    request_note="Store manager raised a procurement request.",
+                    request_note="Manager raised a procurement request.",
                     **fields,
                 )
             else:

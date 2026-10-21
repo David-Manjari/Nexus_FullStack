@@ -117,7 +117,7 @@ curl -i -c cookies.txt -X POST http://localhost:5000/session/login \
 curl -b cookies.txt http://localhost:5000/requests
 ```
 
-The supported roles are `admin`, `manager`, `store_manager`, and `staff`. Access is checked against the user's current database role. Deactivated accounts cannot log in or continue using existing sessions.
+The supported roles are `admin`, `manager`, and `staff`. Managers handle inventory, asset assignment and fulfilment, procurement, and approvals. Access is checked against the user's current database role. Deactivated accounts cannot log in or continue using existing sessions. Applying `backend/schema.sql` converts existing `store_manager` accounts to `staff`.
 
 Project access also includes the project's creator and assigned `manager_id`. Admins and managers can assign a project manager and staff to any project that is not completed or cancelled. Admins, managers, and the assigned project manager can manage milestones while a project is open. Completed and cancelled projects are locked against further edits.
 
@@ -133,7 +133,6 @@ Run the seed script to insert the demo accounts and sample assets. It does not r
 |---|---|---|---|
 | Admin | `admin` | `admin@nexus.com` | `Admin-demo-2026` |
 | Manager | `manager` | `manager@nexus.com` | `Manager-demo-2026` |
-| Store manager | `storemanager` | `store@nexus.com` | `Store-demo-2026` |
 | Staff | `staff` | `staff@nexus.com` | `Staff-demo-2026` |
 
 These credentials are for local development only. Do not use them in a deployed environment.

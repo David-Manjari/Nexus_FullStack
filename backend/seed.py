@@ -4,7 +4,6 @@ from .db import connect_database
 DEMO_USERS = [
     ("admin", "admin@nexus.com", "Admin-demo-2026", "admin"),
     ("manager", "manager@nexus.com", "Manager-demo-2026", "manager"),
-    ("storemanager", "store@nexus.com", "Store-demo-2026", "store_manager"),
     ("staff", "staff@nexus.com", "Staff-demo-2026", "staff"),
 ]
 
@@ -33,8 +32,8 @@ def seed():
                 (username, email, generate_password_hash(password), role),
             )
 
-        store_manager = connection.execute(
-            'SELECT user_id FROM "Users" WHERE username = %s', ("storemanager",)
+        staff = connection.execute(
+            'SELECT user_id FROM "Users" WHERE username = %s', ("staff",)
         ).fetchone()["user_id"]
         manager = connection.execute(
             'SELECT user_id FROM "Users" WHERE username = %s', ("manager",)
@@ -48,7 +47,7 @@ def seed():
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (serial_no) DO NOTHING
                 """,
-                (asset_type, name, category, brand, serial_no, status, store_manager),
+                (asset_type, name, category, brand, serial_no, status, staff),
             )
 
         for name, category, brand, serial_no, plate_no, make, model, mileage in DEMO_VEHICLES:
@@ -60,7 +59,7 @@ def seed():
                 ON CONFLICT (serial_no) DO NOTHING
                 RETURNING asset_id
                 """,
-                (name, category, brand, serial_no, store_manager),
+                (name, category, brand, serial_no, staff),
             ).fetchone()
             if created:
                 connection.execute(

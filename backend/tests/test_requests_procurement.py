@@ -26,7 +26,7 @@ def world(app):
     users = {}
     asset_ids = []
     with connect_database() as connection:
-        for role in ("admin", "manager", "store_manager", "staff"):
+        for role in ("admin", "manager", "staff"):
             row = connection.execute(
                 'INSERT INTO "Users" (username, email, password_hash, role) '
                 "VALUES (%s, %s, 'x', %s) RETURNING user_id",
@@ -34,19 +34,22 @@ def world(app):
             ).fetchone()
             users[role] = row["user_id"]
 
-    def client_for(role):
+    def client_for_user(user_id, role):
         client = app.test_client()
         with client.session_transaction() as sess:
-            sess["user_id"] = users[role]
+            sess["user_id"] = user_id
             sess["role"] = role
         return client
+
+    def client_for(role):
+        return client_for_user(users[role], role)
 
     def make_asset(name, status="available", asset_type="tool"):
         with connect_database() as connection:
             row = connection.execute(
                 'INSERT INTO "Assets" (asset_type, name, status, added_by) '
                 "VALUES (%s, %s, %s, %s) RETURNING asset_id",
-                (asset_type, name, status, users["store_manager"]),
+                (asset_type, name, status, users["manager"]),
             ).fetchone()
         asset_ids.append(row["asset_id"])
         return row["asset_id"]
@@ -58,6 +61,7 @@ def world(app):
     w.tag = tag
     w.users = users
     w.client = client_for
+    w.client_for_user = client_for_user
     w.make_asset = make_asset
     w.name = lambda label: f"ZZ{label}-{tag}"
     yield w
@@ -100,6 +104,12 @@ def raise_request(client, **body):
 def test_schema_can_be_applied_twice():
     init_db()
     init_db()
+    with connect_database() as connection:
+        legacy_accounts = connection.execute(
+            'SELECT COUNT(*) AS count FROM "Users" WHERE role = %s',
+            ("store_manager",),
+        ).fetchone()["count"]
+    assert legacy_accounts == 0
 
 
 def test_old_style_rows_still_work(world):
@@ -121,7 +131,7 @@ def test_requires_login(app):
     assert app.test_client().post("/requests", json={}).status_code == 401
 
 
-def test_asset_in_stock_waits_for_store_manager(world):
+def test_asset_in_stock_waits_for_manager(world):
     name = world.name("drill")
     world.make_asset(name)
     response = raise_request(world.client("staff"), item_name=name)
@@ -183,8 +193,42 @@ def test_disbursement_is_escalated_to_a_manager_not_to_self(world):
             'SELECT role, user_id FROM "Users" WHERE user_id = %s',
             (request_row["escalated_to"],),
         ).fetchone()
+        notification = connection.execute(
+            'SELECT message, notif_type FROM "Notifications" WHERE user_id = %s '
+            "ORDER BY notification_id DESC LIMIT 1",
+            (request_row["escalated_to"],),
+        ).fetchone()
     assert approver["role"] == "manager"
     assert approver["user_id"] != world.users["staff"]
+    assert notification["notif_type"] == "request_escalated"
+    assert f"request #{request_row['request_id']}" in notification["message"]
+    approver_client = world.client_for_user(approver["user_id"], approver["role"])
+    visible_notifications = approver_client.get("/notifications").get_json()["notifications"]
+    assert any(
+        item["notif_type"] == "request_escalated"
+        and f"request #{request_row['request_id']}" in item["message"]
+        for item in visible_notifications
+    )
+
+
+def test_inactive_accounts_are_not_selected_as_approvers(world):
+    with connect_database() as connection:
+        connection.execute(
+            'UPDATE "Users" SET is_active = FALSE WHERE user_id = %s',
+            (world.users["manager"],),
+        )
+
+    row = raise_request(
+        world.client("staff"), request_type="project", reason="Need a crew"
+    ).get_json()["request"]
+    with connect_database() as connection:
+        approver = connection.execute(
+            'SELECT role, is_active FROM "Users" WHERE user_id = %s',
+            (row["escalated_to"],),
+        ).fetchone()
+    assert row["status"] == "escalated"
+    assert approver["role"] == "manager"
+    assert approver["is_active"] is True
 
 
 def test_manager_request_goes_to_an_admin(world):
@@ -208,16 +252,12 @@ def test_visibility_by_role(world):
     ]["request_id"]
 
     assert world.client("staff").get(f"/requests/{request_id}").status_code == 200
-    assert world.client("store_manager").get(f"/requests/{request_id}").status_code == 200
+    assert world.client("manager").get(f"/requests/{request_id}").status_code == 200
     assert world.client("admin").get(f"/requests/{request_id}").status_code == 200
-    # Another staff member and a manager with nothing escalated to them cannot.
-    other = world.client("manager")
-    assert other.get(f"/requests/{request_id}").status_code == 404
-
     listed = world.client("staff").get("/requests").get_json()["requests"]
     assert request_id in [r["request_id"] for r in listed]
-    listed = other.get("/requests").get_json()["requests"]
-    assert request_id not in [r["request_id"] for r in listed]
+    listed = world.client("manager").get("/requests").get_json()["requests"]
+    assert request_id in [r["request_id"] for r in listed]
 
 
 def test_filters_and_bad_filters(world):
@@ -231,7 +271,7 @@ def test_filters_and_bad_filters(world):
 
 
 # --- fulfilling -------------------------------------------------------------
-def test_store_manager_fulfils_and_asset_is_assigned(world):
+def test_manager_fulfils_and_asset_is_assigned(world):
     name = world.name("laptop")
     asset_id = world.make_asset(name, asset_type="device")
     request_id = raise_request(world.client("staff"), item_name=name).get_json()[
@@ -240,7 +280,7 @@ def test_store_manager_fulfils_and_asset_is_assigned(world):
 
     assert world.client("staff").patch(f"/requests/{request_id}/fulfil").status_code == 403
 
-    response = world.client("store_manager").patch(
+    response = world.client("manager").patch(
         f"/requests/{request_id}/fulfil", json={"asset_id": asset_id}
     )
     assert response.status_code == 200
@@ -257,7 +297,7 @@ def test_store_manager_fulfils_and_asset_is_assigned(world):
     assert assignment["user_id"] == world.users["staff"]
     assert assignment["request_id"] == request_id
 
-    again = world.client("store_manager").patch(f"/requests/{request_id}/fulfil")
+    again = world.client("manager").patch(f"/requests/{request_id}/fulfil")
     assert again.status_code == 409
 
 
@@ -265,33 +305,38 @@ def test_cannot_fulfil_an_unavailable_asset_or_a_money_request(world):
     asset_id = world.make_asset(world.name("busy"), status="assigned")
     staff = world.client("staff")
     request_id = raise_request(staff, asset_id=asset_id).get_json()["request"]["request_id"]
-    store = world.client("store_manager")
-    response = store.patch(f"/requests/{request_id}/fulfil")
+    manager = world.client("manager")
+    response = manager.patch(f"/requests/{request_id}/fulfil")
     assert response.status_code in (404, 409)
 
     money = raise_request(staff, request_type="disbursement", amount=10).get_json()
-    assert store.patch(f"/requests/{money['request']['request_id']}/fulfil").status_code == 422
+    assert manager.patch(f"/requests/{money['request']['request_id']}/fulfil").status_code == 422
 
 
 # --- procurement ------------------------------------------------------------
 def make_procurement(world, label, **extra):
-    """Create a draft procurement for a fresh inventory item, as the store manager."""
+    """Create a draft procurement for a fresh inventory item, as a manager."""
     name = world.name(label)
     world.make_asset(name)
     body = {"item_name": name}
     body.update(extra)
-    response = world.client("store_manager").post("/procurements", json=body)
+    response = world.client("manager").post("/procurements", json=body)
     assert response.status_code == 201, response.get_json()
     return response.get_json()["procurement"]
 
 
-def test_only_the_store_manager_can_use_procurement(world):
-    """Tasks T9 and T16: enforced on the server for every other role."""
+def test_only_managers_can_use_procurement(world):
+    """Procurement access is enforced on the server for every other role."""
     name = world.name("pump")
     world.make_asset(name)
     payload = {"item_name": name, "quantity": 1}
     pid = make_procurement(world, "guarded")["procurement_id"]
-    for role in ("staff", "manager", "admin"):
+    manager = world.client("manager")
+    assert manager.post("/procurements", json=payload).status_code == 201
+    assert manager.get("/procurements").status_code == 200
+    assert manager.get("/procurements/open").status_code == 200
+    assert manager.get(f"/procurements/{pid}").status_code == 200
+    for role in ("staff", "admin"):
         client = world.client(role)
         assert client.post("/procurements", json=payload).status_code == 403, role
         assert client.get("/procurements").status_code == 403, role
@@ -305,27 +350,37 @@ def test_procurement_requires_login(app):
     assert app.test_client().post("/procurements", json={}).status_code == 401
 
 
-def test_store_manager_creates_a_draft(world):
+def test_manager_creates_a_draft(world):
     row = make_procurement(world, "pump", quantity=2)
     assert row["status"] == "draft"
     assert row["quantity"] == 2
-    assert row["raised_by"] == world.users["store_manager"]
+    assert row["raised_by"] == world.users["manager"]
     assert row["history"][0]["status"] == "draft"
+
+
+def test_manager_can_view_company_audit(world):
+    response = world.client("manager").get("/audit/company")
+    assert response.status_code == 200
+    assert set(response.get_json()["cards"]) == {
+        "projects",
+        "disbursements",
+        "procurement",
+    }
 
 
 # --- tasks T11 and T17: items must exist in the inventory ----------------------
 def test_item_must_exist_in_inventory(world):
-    store = world.client("store_manager")
-    unknown = store.post("/procurements", json={"item_name": world.name("ghost")})
+    manager = world.client("manager")
+    unknown = manager.post("/procurements", json={"item_name": world.name("ghost")})
     assert unknown.status_code == 422
     assert "inventory" in unknown.get_json()["error"]
-    assert store.post("/procurements", json={"asset_id": 99999999}).status_code == 422
+    assert manager.post("/procurements", json={"asset_id": 99999999}).status_code == 422
 
 
 def test_inventory_name_match_ignores_case_and_uses_the_inventory_name(world):
     name = world.name("Hammer")
     asset_id = world.make_asset(name, asset_type="tool")
-    response = world.client("store_manager").post(
+    response = world.client("manager").post(
         "/procurements", json={"item_name": f"  {name.lower()}  "}
     )
     assert response.status_code == 201
@@ -333,21 +388,21 @@ def test_inventory_name_match_ignores_case_and_uses_the_inventory_name(world):
     assert row["item_name"] == name
     assert row["asset_type"] == "tool"
 
-    by_id = world.client("store_manager").post("/procurements", json={"asset_id": asset_id})
+    by_id = world.client("manager").post("/procurements", json={"asset_id": asset_id})
     assert by_id.status_code == 201
     assert by_id.get_json()["procurement"]["item_name"] == name
 
 
 def test_editing_a_draft_cannot_switch_to_an_unknown_item(world):
     row = make_procurement(world, "edit")
-    store = world.client("store_manager")
-    bad = store.patch(
+    manager = world.client("manager")
+    bad = manager.patch(
         f"/procurements/{row['procurement_id']}", json={"item_name": world.name("nowhere")}
     )
     assert bad.status_code == 422
     other = world.name("other")
     world.make_asset(other)
-    good = store.patch(f"/procurements/{row['procurement_id']}", json={"item_name": other})
+    good = manager.patch(f"/procurements/{row['procurement_id']}", json={"item_name": other})
     assert good.status_code == 200
     assert good.get_json()["procurement"]["item_name"] == other
 
@@ -356,7 +411,7 @@ def test_converting_a_request_to_an_item_outside_the_inventory_is_refused(world)
     name = world.name("pendingitem")
     world.make_asset(name)
     pending = raise_request(world.client("staff"), item_name=name).get_json()["request"]
-    refused = world.client("store_manager").post(
+    refused = world.client("manager").post(
         "/procurements",
         json={"request_id": pending["request_id"], "item_name": world.name("elsewhere")},
     )
@@ -365,7 +420,7 @@ def test_converting_a_request_to_an_item_outside_the_inventory_is_refused(world)
 
 # --- task T10: unapproved and unpaid ------------------------------------------
 def test_open_list_shows_only_unapproved_and_unpaid(world):
-    store = world.client("store_manager")
+    manager = world.client("manager")
     draft = make_procurement(world, "open-draft")["procurement_id"]
     approved = make_procurement(world, "open-approved")["procurement_id"]
     paid = make_procurement(world, "open-paid")["procurement_id"]
@@ -382,7 +437,7 @@ def test_open_list_shows_only_unapproved_and_unpaid(world):
             "VALUES (%s, 100, 'paid')",
             (paid,),
         )
-    listed = store.get("/procurements/open")
+    listed = manager.get("/procurements/open")
     assert listed.status_code == 200
     ids = [p["procurement_id"] for p in listed.get_json()["procurements"]]
     assert draft in ids
@@ -392,41 +447,41 @@ def test_open_list_shows_only_unapproved_and_unpaid(world):
 
 # --- life cycle ---------------------------------------------------------------
 def test_procurement_life_cycle(world):
-    store = world.client("store_manager")
+    manager = world.client("manager")
     pid = make_procurement(world, "saw", quantity=3)["procurement_id"]
 
     # Cannot submit without a cost, or buy before approval.
-    assert store.patch(f"/procurements/{pid}", json={"action": "submit"}).status_code == 422
-    assert store.patch(f"/procurements/{pid}", json={"action": "purchased"}).status_code == 409
-    assert store.patch(f"/procurements/{pid}", json={}).status_code == 422
-    assert store.patch(f"/procurements/{pid}", json={"estimated_cost": -1}).status_code == 422
+    assert manager.patch(f"/procurements/{pid}", json={"action": "submit"}).status_code == 422
+    assert manager.patch(f"/procurements/{pid}", json={"action": "purchased"}).status_code == 409
+    assert manager.patch(f"/procurements/{pid}", json={}).status_code == 422
+    assert manager.patch(f"/procurements/{pid}", json={"estimated_cost": -1}).status_code == 422
 
-    edited = store.patch(
+    edited = manager.patch(
         f"/procurements/{pid}", json={"estimated_cost": "250.00", "supplier": "ACME"}
     )
     assert edited.status_code == 200
-    submitted = store.patch(f"/procurements/{pid}", json={"action": "submit"})
+    submitted = manager.patch(f"/procurements/{pid}", json={"action": "submit"})
     assert submitted.get_json()["procurement"]["status"] == "pending_approval"
 
     # No longer a draft: no edits.
-    assert store.patch(f"/procurements/{pid}", json={"supplier": "Other"}).status_code == 409
+    assert manager.patch(f"/procurements/{pid}", json={"supplier": "Other"}).status_code == 409
 
     statuses = [h["status"] for h in submitted.get_json()["procurement"]["history"]]
     assert statuses == ["draft", "draft", "pending_approval"]
 
-    cancelled = store.patch(f"/procurements/{pid}", json={"action": "cancel"})
+    cancelled = manager.patch(f"/procurements/{pid}", json={"action": "cancel"})
     assert cancelled.get_json()["procurement"]["status"] == "cancelled"
 
 
 def test_purchased_only_after_approval(world):
-    store = world.client("store_manager")
+    manager = world.client("manager")
     pid = make_procurement(world, "ladder", estimated_cost=40)["procurement_id"]
     with connect_database() as connection:
         connection.execute(
             'UPDATE "Procurements" SET status = \'approved\' WHERE procurement_id = %s',
             (pid,),
         )
-    bought = store.patch(f"/procurements/{pid}", json={"action": "purchased"})
+    bought = manager.patch(f"/procurements/{pid}", json={"action": "purchased"})
     assert bought.get_json()["procurement"]["status"] == "purchased"
 
 
@@ -436,34 +491,34 @@ def test_manual_procurement_from_a_pending_request(world):
     request_id = raise_request(world.client("staff"), item_name=name).get_json()[
         "request"
     ]["request_id"]
-    store = world.client("store_manager")
+    manager = world.client("manager")
 
-    made = store.post("/procurements", json={"request_id": request_id, "estimated_cost": 5})
+    made = manager.post("/procurements", json={"request_id": request_id, "estimated_cost": 5})
     assert made.status_code == 201
     assert made.get_json()["procurement"]["item_name"] == name
     assert world.client("staff").get(f"/requests/{request_id}").get_json()["request"][
         "status"
     ] == "converted"
 
-    duplicate = store.post("/procurements", json={"request_id": request_id})
+    duplicate = manager.post("/procurements", json={"request_id": request_id})
     assert duplicate.status_code == 409
-    assert store.post("/procurements", json={"request_id": 99999999}).status_code == 404
-    assert store.post("/procurements", json={}).status_code == 422
+    assert manager.post("/procurements", json={"request_id": 99999999}).status_code == 404
+    assert manager.post("/procurements", json={}).status_code == 422
 
 
 def test_procurement_filters_and_missing_records(world):
-    store = world.client("store_manager")
+    manager = world.client("manager")
     make_procurement(world, "filter")
-    ok = store.get("/procurements?status=draft")
+    ok = manager.get("/procurements?status=draft")
     assert ok.status_code == 200
     assert all(p["status"] == "draft" for p in ok.get_json()["procurements"])
-    assert store.get("/procurements?status=nonsense").status_code == 422
-    assert store.get("/procurements/99999999").status_code == 404
-    assert store.patch("/procurements/99999999", json={"action": "cancel"}).status_code == 404
+    assert manager.get("/procurements?status=nonsense").status_code == 422
+    assert manager.get("/procurements/99999999").status_code == 404
+    assert manager.patch("/procurements/99999999", json={"action": "cancel"}).status_code == 404
 
 
 # --- task T20: audit log --------------------------------------------------------
-def audit_actions(world, role="store_manager"):
+def audit_actions(world, role="manager"):
     with connect_database() as connection:
         rows = connection.execute(
             'SELECT action, entity_type, entity_id FROM "Audit_Log" '
@@ -474,11 +529,11 @@ def audit_actions(world, role="store_manager"):
 
 
 def test_every_procurement_action_is_audited(world):
-    store = world.client("store_manager")
+    manager = world.client("manager")
     pid = make_procurement(world, "audited")["procurement_id"]
-    store.patch(f"/procurements/{pid}", json={"estimated_cost": 10})
-    store.patch(f"/procurements/{pid}", json={"action": "submit"})
-    store.patch(f"/procurements/{pid}", json={"action": "cancel"})
+    manager.patch(f"/procurements/{pid}", json={"estimated_cost": 10})
+    manager.patch(f"/procurements/{pid}", json={"action": "submit"})
+    manager.patch(f"/procurements/{pid}", json={"action": "cancel"})
     actions = [a for a, kind, entity in audit_actions(world) if kind == "procurement" and entity == pid]
     assert actions == [
         "procurement_created", "procurement_updated",
@@ -492,7 +547,7 @@ def test_request_actions_are_audited(world):
     request_id = raise_request(world.client("staff"), item_name=name).get_json()["request"][
         "request_id"
     ]
-    world.client("store_manager").patch(f"/requests/{request_id}/fulfil", json={"asset_id": asset_id})
+    world.client("manager").patch(f"/requests/{request_id}/fulfil", json={"asset_id": asset_id})
     assert ("request_created", "request", request_id) in audit_actions(world, "staff")
     assert ("request_fulfilled", "request", request_id) in audit_actions(world)
 
@@ -505,29 +560,29 @@ def test_a_request_converted_to_procurement_is_audited(world):
 
 # --- found by QA: the completion flow and blank form fields ---------------------
 def test_a_draft_made_from_an_unknown_item_can_still_be_completed(world):
-    """Requests can name any item; the store manager must still be able to finish the draft."""
+    """Managers can complete procurements from requests naming an unknown item."""
     name = world.name("unlisted")
     body = raise_request(world.client("staff"), item_name=name).get_json()
     pid = body["procurement"]["procurement_id"]
-    store = world.client("store_manager")
-    done = store.patch(
+    manager = world.client("manager")
+    done = manager.patch(
         f"/procurements/{pid}",
         json={"item_name": name, "estimated_cost": 90, "supplier": "ACME"},
     )
     assert done.status_code == 200
-    assert store.patch(f"/procurements/{pid}", json={"action": "submit"}).status_code == 200
+    assert manager.patch(f"/procurements/{pid}", json={"action": "submit"}).status_code == 200
 
 
 def test_blank_optional_fields_are_treated_as_not_given(world):
     name = world.name("blankform")
     world.make_asset(name)
-    response = world.client("store_manager").post(
+    response = world.client("manager").post(
         "/procurements",
         json={"item_name": name, "supplier": "", "reason": "  ", "category": "",
               "quantity": 1, "estimated_cost": None},
     )
     assert response.status_code == 201
-    assert world.client("store_manager").post(
+    assert world.client("manager").post(
         "/procurements", json={"item_name": "   "}
     ).status_code == 422
 
@@ -535,6 +590,6 @@ def test_blank_optional_fields_are_treated_as_not_given(world):
 def test_huge_numbers_are_rejected_not_crashed(world):
     name = world.name("huge")
     world.make_asset(name)
-    store = world.client("store_manager")
-    assert store.post("/procurements", json={"item_name": name, "quantity": 10**12}).status_code == 422
+    manager = world.client("manager")
+    assert manager.post("/procurements", json={"item_name": name, "quantity": 10**12}).status_code == 422
     assert raise_request(world.client("staff"), item_name=name, quantity=10**12).status_code == 422

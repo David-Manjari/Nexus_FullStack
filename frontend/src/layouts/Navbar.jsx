@@ -4,13 +4,13 @@ import NotificationBell from "../components/NotificationBell";
 
 export const PAGE_LINKS = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'inventory', label: 'Inventory', roles: ['admin', 'manager', 'store_manager', 'staff'] },
-    { id: 'requests', label: 'Requests', roles: ['admin', 'manager', 'store_manager', 'staff'] },
-    { id: 'procurement', label: 'Procurement', roles: ['store_manager'] },
+    { id: 'inventory', label: 'Inventory', roles: ['admin', 'manager', 'staff'] },
+    { id: 'requests', label: 'Requests', roles: ['admin', 'manager', 'staff'] },
+    { id: 'procurement', label: 'Procurement', roles: ['manager'] },
     { id: 'approvals', label: 'Approvals', roles: ['admin', 'manager'] },
     { id: 'disbursements', label: 'Disbursements', roles: ['admin', 'manager'] },
-    { id: 'projects', label: 'Projects', roles: ['admin', 'manager', 'store_manager', 'staff'] },
-    { id: 'notifications', label: 'Notifications', roles: ['admin', 'manager', 'store_manager', 'staff'] },
+    { id: 'projects', label: 'Projects', roles: ['admin', 'manager', 'staff'] },
+    { id: 'notifications', label: 'Notifications', roles: ['admin', 'manager', 'staff'] },
     { id: 'admin', label: 'Admin', roles: ['admin'] },
 ];
 

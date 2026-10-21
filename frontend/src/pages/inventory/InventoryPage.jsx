@@ -16,7 +16,7 @@ const STATUSES = ["all", "available", "assigned", "maintenance"];
 
 export default function InventoryPage({ type }) {
   const { user } = useAuth();
-  const canManage = user?.role === "store_manager";
+  const canManage = user?.role === "manager";
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);

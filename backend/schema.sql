@@ -4,11 +4,16 @@ CREATE TABLE IF NOT EXISTS "Users" (
     email          VARCHAR(254) NOT NULL UNIQUE,
     password_hash  TEXT         NOT NULL,
     role           VARCHAR(20)  NOT NULL
-                   CHECK (role IN ('admin', 'manager', 'store_manager', 'staff')),
+                   CHECK (role IN ('admin', 'manager', 'staff')),
     is_active      BOOLEAN      NOT NULL DEFAULT TRUE,
     last_login_at  TIMESTAMPTZ,
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE "Users" DROP CONSTRAINT IF EXISTS users_role_check;
+UPDATE "Users" SET role = 'staff' WHERE role = 'store_manager';
+ALTER TABLE "Users" ADD CONSTRAINT users_role_check
+    CHECK (role IN ('admin', 'manager', 'staff'));
 
 CREATE TABLE IF NOT EXISTS "Projects" (
     project_id   SERIAL PRIMARY KEY,
