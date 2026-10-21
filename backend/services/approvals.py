@@ -6,7 +6,7 @@ call create_approval() inside their own transaction when they need a decision.
 
 from psycopg.types.json import Jsonb
 
-APPROVALS = '"Approvals"'
+APPROVALS = '"Approval_Items"'
 USERS = '"Users"'
 VIEWS = '"Approval_Views"'
 

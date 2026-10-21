@@ -48,7 +48,7 @@ def _cleanup(user_ids, approval_ids):
                 (approval_ids,),
             )
             connection.execute(
-                'DELETE FROM "Approvals" WHERE approval_id = ANY(%s)', (approval_ids,)
+                'DELETE FROM "Approval_Items" WHERE approval_id = ANY(%s)', (approval_ids,)
             )
         connection.execute('DELETE FROM "Users" WHERE user_id = ANY(%s)', (user_ids,))
 
@@ -93,7 +93,7 @@ def _make(people, request_type="equipment_assignment"):
 def _row(approval_id):
     with connect_database() as connection:
         return connection.execute(
-            'SELECT * FROM "Approvals" WHERE approval_id = %s', (approval_id,)
+            'SELECT * FROM "Approval_Items" WHERE approval_id = %s', (approval_id,)
         ).fetchone()
 
 

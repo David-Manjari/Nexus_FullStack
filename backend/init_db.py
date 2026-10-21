@@ -12,7 +12,7 @@ SCHEMA_FILE = Path(__file__).with_name("schema.sql")
 # tables in schema.sql, sync if a new table is added.
 TABLES = (
     "Audit_Log", "Notifications", "Disbursement_Audit_Logs", "Payment_History",
-    "Disbursements", "Approval_Views", "Approvals", "Request_History",
+    "Disbursements", "Approval_Items", "Approval_Views", "Approvals", "Request_History",
     "Procurement", "Procurements", "Asset_Assignments", "Requests",
     "Vehicle_Details", "Assets", "Project_Milestones", "Project_Status_History",
     "Approval_Requests", "Project_Staff_Assignments", "Tasks", "Projects", "Users",

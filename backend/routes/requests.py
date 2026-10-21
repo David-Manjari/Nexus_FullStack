@@ -14,13 +14,15 @@ from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, request, session
 
-from ..admin_accounts import connect_database
+from ..db import connect_database
 from ..auth import roles_required
+from ..services.approvals import create_approval
 from ..services.request_workflow import (
     attach_history,
     check_stock,
     convert_to_procurement,
     escalate_request,
+    log_action,
     pick_approver,
     record_event,
 )
@@ -46,12 +48,12 @@ FULFILLABLE_STATUSES = ("pending", "approved")
 MAX_AMOUNT = Decimal("9999999999.99")  # fits NUMERIC(12,2)
 
 REQUEST_SELECT = f"""
-SELECT r.request_id, r.request_type, r.requested_by, u.username AS requester_name,
+SELECT r.request_id, r.request_type, r.requester_id AS requested_by, u.username AS requester_name,
        r.project_id, r.asset_id, r.asset_type, r.item_name, r.category, r.quantity,
        r.amount, r.needed_by, r.reason, r.status, r.escalated_to, r.fulfilled_by,
        r.created_at, r.updated_at
 FROM {REQUESTS} r
-JOIN {USERS} u ON u.user_id = r.requested_by
+JOIN {USERS} u ON u.user_id = r.requester_id
 """
 
 
@@ -110,10 +112,10 @@ def _visibility(role, user_id):
     if role == "admin":
         return "TRUE", ()
     if role == "store_manager":
-        return "(r.request_type = 'asset' OR r.requested_by = %s)", (user_id,)
+        return "(r.request_type = 'asset' OR r.requester_id = %s)", (user_id,)
     if role == "manager":
-        return "(r.requested_by = %s OR r.escalated_to = %s)", (user_id, user_id)
-    return "r.requested_by = %s", (user_id,)
+        return "(r.requester_id = %s OR r.escalated_to = %s)", (user_id, user_id)
+    return "r.requester_id = %s", (user_id,)
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +146,8 @@ def create_request():
         return _error("asset_type must be one of: tool, device, vehicle.", 422)
 
     quantity = 1 if data.get("quantity") is None else _int(data.get("quantity"))
-    if quantity is None or quantity < 1:
-        return _error("quantity must be a whole number of at least 1.", 422)
+    if quantity is None or quantity < 1 or quantity > 1_000_000:
+        return _error("quantity must be a whole number from 1 to 1000000.", 422)
 
     needed_by = None
     if data.get("needed_by") is not None:
@@ -185,7 +187,7 @@ def create_request():
         created = connection.execute(
             f"""
             INSERT INTO {REQUESTS}
-                (request_type, requested_by, project_id, asset_id, asset_type,
+                (request_type, requester_id, project_id, asset_id, asset_type,
                  item_name, category, quantity, amount, needed_by, reason)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING request_id
@@ -195,8 +197,15 @@ def create_request():
         ).fetchone()
         new_id = created["request_id"]
         record_event(connection, "request", new_id, "submitted", "Request submitted.", user_id)
+        log_action(
+            connection, user_id, "request_created", "request", new_id,
+            {"request_type": request_type, "item_name": item_name,
+             "asset_id": asset_id, "quantity": quantity,
+             "amount": str(amount) if amount is not None else None},
+        )
 
         procurement = None
+        label = item_name or f"asset #{asset_id}"
         if request_type == "asset":
             # Not in the store? Start a procurement draft automatically.
             stock = check_stock(
@@ -207,6 +216,13 @@ def create_request():
                 record_event(
                     connection, "request", new_id, "pending",
                     "Item available. Sent to the store manager.",
+                )
+                create_approval(
+                    connection,
+                    "equipment_assignment",
+                    user_id,
+                    f"Request #{new_id}: {quantity} x {label}"[:500],
+                    reference_id=new_id,
                 )
             else:
                 procurement = convert_to_procurement(
@@ -223,6 +239,15 @@ def create_request():
                     connection, "request", new_id, "pending",
                     "Waiting for an approver to be available.",
                 )
+            if request_type == "disbursement":
+                summary = f"Request #{new_id}: KES {amount:,.2f} - {reason}"
+                approval_type = "disbursement"
+            else:
+                summary = f"Request #{new_id}: project support - {reason}"
+                approval_type = "escalation"
+            create_approval(
+                connection, approval_type, user_id, summary[:500], reference_id=new_id,
+            )
 
         # TODO: notify the approver / store manager once notifications exist.
         row = connection.execute(
@@ -300,7 +325,7 @@ def fulfil_request(request_id):
 
     with connect_database() as connection:
         found = connection.execute(
-            f"SELECT request_type, requested_by, asset_id, status FROM {REQUESTS} "
+            f"SELECT request_type, requester_id AS requested_by, asset_id, status FROM {REQUESTS} "
             "WHERE request_id = %s FOR UPDATE",
             (request_id,),
         ).fetchone()
@@ -349,6 +374,10 @@ def fulfil_request(request_id):
         record_event(
             connection, "request", request_id, "fulfilled",
             f"Issued: {asset['name']}.", session["user_id"],
+        )
+        log_action(
+            connection, session["user_id"], "request_fulfilled", "request", request_id,
+            {"asset_id": asset_id, "issued_to": found["requested_by"]},
         )
         # TODO: notify the requester once notifications exist.
         row = connection.execute(

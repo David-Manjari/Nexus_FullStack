@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request, session
 
 from ..auth import roles_required
 from ..db import connect_database
+from ..services.approvals import create_approval
 from ..services.audit import (
     get_audit_history,
     get_payment_history,
@@ -114,6 +115,13 @@ def create_disbursement():
             f"Payout created for {payee.strip()}.",
             user_id=session["user_id"],
             connection=connection,
+        )
+        create_approval(
+            connection,
+            "disbursement",
+            session["user_id"],
+            f"Disbursement of {row['currency']} {row['amount']:,.2f} to {row['payee']} ({row['reference']})"[:500],
+            reference_id=row["disbursement_id"],
         )
     return jsonify(dict(row)), 201
 
