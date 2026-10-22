@@ -2,7 +2,7 @@
 
 Nexus is a role-aware operations API for organizations coordinating inventory, field requests, procurement, approvals, projects, and disbursements. It provides a shared PostgreSQL data store and HTTP endpoints for workflows that might otherwise rely on paper forms, spreadsheets, and chat.
 
-**Project status:** This repository contains the Phase 2 database and Flask backend. It includes local demo accounts and sample data. Disbursements use a payment simulator; no real funds are transferred and no payment provider is connected.
+**Project status:** This repository contains the Phase 2 database and Flask backend. It includes local demo accounts and sample data. Disbursements can be sent through the Safaricom Daraja B2C sandbox when explicitly enabled; the integration is pinned to the sandbox and cannot send production payouts.
 
 ## Backend capabilities
 
@@ -13,7 +13,7 @@ Nexus is a role-aware operations API for organizations coordinating inventory, f
 - Procurement draft creation and updates, with approval workflow endpoints.
 - Project creation, tracking, submission, and status updates.
 - Admin account listing, creation, editing, password changes, and deactivation. Passwords are stored as hashes; at least one active admin must remain.
-- Disbursement records, status processing, payment history, and audit history. Payment outcomes are simulated.
+- Disbursement records, approved sandbox payout submission, callback-driven status, payment history, and audit history.
 - JSON error responses for common validation, authorization, missing-record, conflict, and database errors.
 
 List endpoints return empty JSON collections when there are no matching records. Protected routes return `401` when authentication is missing and `403` when the signed-in role is not allowed. Other common responses include `400` for invalid input, `404` for missing or inaccessible records, `409` for conflicts, and `503` when the database is unavailable.
@@ -71,7 +71,9 @@ The disbursement blueprint uses the `/api` prefix. Other routes do not. Route-le
 | GET | `/api/disbursements/summary` | Get disbursement totals by status |
 | POST | `/api/disbursements` | Create a disbursement |
 | GET | `/api/disbursements/<int:disbursement_id>` | Get a disbursement |
-| POST | `/api/disbursements/<int:disbursement_id>/process` | Simulate a disbursement outcome |
+| POST | `/api/disbursements/<int:disbursement_id>/process` | Submit an approved payout to Daraja B2C sandbox |
+| POST | `/api/daraja/b2c/result/<token>` | Receive a Daraja result callback |
+| POST | `/api/daraja/b2c/timeout/<token>` | Receive a Daraja timeout callback |
 | GET | `/api/disbursements/<int:disbursement_id>/history` | Get payment and audit history |
 | GET | `/api/payment-history` | List payment history |
 
@@ -80,6 +82,25 @@ For request and procurement payload details and workflow behavior, see [docs/api
 ## Request body keys
 
 Send JSON unless uploading an asset image, which uses `multipart/form-data`. Required fields and conditional requirements are noted below; other listed keys are optional.
+
+New account passwords and password changes must contain at least 8 characters, including an uppercase letter, a lowercase letter, a number, and a special character. Signing in does not revalidate this policy, so existing accounts remain able to log in and can adopt the policy when their password is changed.
+
+## Daraja B2C sandbox setup
+
+The integration is disabled by default. Start from the root `.env.example` and set the following in the untracked root `.env` only after creating a Daraja sandbox app:
+
+- `DARAJA_B2C_ENABLED=true`
+- `DARAJA_CONSUMER_KEY` and `DARAJA_CONSUMER_SECRET` from the sandbox app
+- `DARAJA_INITIATOR_NAME`, `DARAJA_SHORTCODE`, and `DARAJA_SECURITY_CREDENTIAL` from the sandbox setup
+- `DARAJA_B2C_COMMAND_ID` to a command enabled for the use case (`BusinessPayment` by default)
+- `DARAJA_CALLBACK_BASE_URL` to a public HTTPS URL that routes to this backend
+- `DARAJA_CALLBACK_TOKEN` to a locally generated random value of at least 32 characters
+
+Configure the same callback base URL and token in the Daraja request callback URLs. For local development, use an HTTPS tunnel to the backend; do not expose the frontend or use plain HTTP. Generate the security credential using Safaricom's sandbox certificate and instructions; do not store the initiator password or credentials in source control.
+
+Payout creation accepts Kenyan mobile numbers and whole KES amounts from 1 through 70,000. A separate admin/manager must approve the payout, and the approver cannot submit it. Submission moves the item to `processing`; only a correlated Daraja callback with a matching amount and transaction receipt marks it paid. A timeout or ambiguous network response remains `processing` and must be reconciled before anyone retries. Do not assume a successful submission response means the payout completed. The callback token is an additional shared-secret guard, not a Daraja callback signature; callback transaction IDs and amount are also checked.
+
+The B2C client uses only `https://sandbox.safaricom.co.ke`. Sandbox test values and behavior are controlled by Safaricom and may differ from production. No live-money credentials or production endpoint should be added to this integration.
 
 | Method and path | Body keys |
 |---|---|
@@ -102,8 +123,8 @@ Send JSON unless uploading an asset image, which uses `multipart/form-data`. Req
 | `PATCH /projects/<int:project_id>/status` | `status` (required), `reason`; status values: `approved`, `active`, `on_hold`, `completed`, `cancelled` |
 | `POST /projects/<int:project_id>/milestones` | `title` (required), `description`, `due_date` |
 | `PATCH /projects/<int:project_id>/milestones/<int:milestone_id>` | `status` (required: `planned`, `in_progress`, or `completed`) |
-| `POST /api/disbursements` | `payee`, `amount` (required); `description`, `currency` (defaults to `KES`) |
-| `POST /api/disbursements/<int:disbursement_id>/process` | `simulated_result` (`paid` or `failed`; defaults to `paid`) |
+| `POST /api/disbursements` | `payee`, `recipient_phone`, `amount` (required); `description`, `currency` (`KES` only) |
+| `POST /api/disbursements/<int:disbursement_id>/process` | Empty JSON body; payout must be approved before submission |
 
 ## Authentication
 

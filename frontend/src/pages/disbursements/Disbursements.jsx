@@ -11,7 +11,13 @@ function Disbursements() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ payee: "", amount: "", currency: "KES", description: "" });
+  const [form, setForm] = useState({
+    payee: "",
+    recipientPhone: "",
+    amount: "",
+    currency: "KES",
+    description: "",
+  });
 
   async function load() {
     setLoading(true);
@@ -27,12 +33,36 @@ function Disbursements() {
 
   useEffect(() => { load(); }, []);
 
-  async function runPayment(id, simulatedResult) {
+  const hasProcessing = payouts.some((payout) => payout.status === "Processing");
+  useEffect(() => {
+    if (!hasProcessing) return undefined;
+
+    let active = true;
+    const interval = window.setInterval(async () => {
+      try {
+        const latest = await getDisbursements();
+        if (active) {
+          setPayouts(latest);
+          setError("");
+        }
+      } catch (refreshError) {
+        if (active) {
+          setError(refreshError.message || "Could not refresh payout status.");
+        }
+      }
+    }, 8000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [hasProcessing]);
+
+  async function runPayment(id) {
     setBusyId(id);
     setError("");
     try {
-      // The backend simulates a complete paid/failed outcome; Processing is not a client-set status.
-      await processDisbursement(id, simulatedResult);
+      await processDisbursement(id);
       await load();
     } catch (actionError) {
       setError(actionError.message || "Could not process this disbursement.");
@@ -46,9 +76,14 @@ function Disbursements() {
     setCreating(true);
     setError("");
     try {
-      // New payouts are created by Flask; payment outcomes remain explicitly simulated.
       await createDisbursement(form);
-      setForm({ payee: "", amount: "", currency: "KES", description: "" });
+      setForm({
+        payee: "",
+        recipientPhone: "",
+        amount: "",
+        currency: "KES",
+        description: "",
+      });
       await load();
     } catch (createError) {
       setError(createError.message || "Could not create disbursement.");
@@ -78,6 +113,7 @@ function Disbursements() {
           <div>
             <h3>{payout.recipient}</h3>
             <p>{payout.reference}</p>
+            {payout.recipientPhone && <p>Mobile: {payout.recipientPhone}</p>}
           </div>
 
           <strong className={`payout-status ${statusClass}`}>{payout.status}</strong>
@@ -97,18 +133,15 @@ function Disbursements() {
 
         <div className="payout-actions">
           {payout.status === "Pending" && (
-            <>
-              <button type="button" disabled={busyId === payout.id} onClick={() => runPayment(payout.id, "paid")}>
-                Simulate paid
-              </button>
-
-              <button type="button" disabled={busyId === payout.id} onClick={() => runPayment(payout.id, "failed")}>
-                Simulate failed
-              </button>
-            </>
+            <button type="button" disabled={busyId === payout.id} onClick={() => runPayment(payout.id)}>
+              {busyId === payout.id ? "Submitting..." : "Send via Daraja sandbox"}
+            </button>
           )}
 
-          {payout.status === "Paid" && <p>Payout completed successfully.</p>}
+          {payout.status === "Processing" && (
+            <p>{payout.providerMessage || "Awaiting Daraja callback. Do not retry while processing."}</p>
+          )}
+          {payout.status === "Paid" && <p>Sandbox payout completed successfully.</p>}
           {payout.status === "Failed" && payout.failureReason && <p>{payout.failureReason}</p>}
         </div>
       </div>
@@ -119,13 +152,13 @@ function Disbursements() {
     <div className="disbursements-page">
       <header className="disbursements-header">
         <h1>Disbursements</h1>
-        <p>Manage approved requests and monitor payout status.</p>
+        <p>Sandbox only: no production payouts are sent.</p>
       </header>
 
       <form onSubmit={handleCreate} style={{ display: "grid", gap: 12, maxWidth: 560, marginBottom: 24 }}>
         <label>Payee<input required value={form.payee} onChange={(event) => setForm({ ...form, payee: event.target.value })} /></label>
-        <label>Amount<input required type="number" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
-        <label>Currency<input required maxLength={3} value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} /></label>
+        <label>Safaricom mobile number<input required type="tel" placeholder="07XXXXXXXX" value={form.recipientPhone} onChange={(event) => setForm({ ...form, recipientPhone: event.target.value })} /></label>
+        <label>Amount (KES)<input required type="number" min="1" max="70000" step="1" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
         <label>Description<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
         <button type="submit" disabled={creating}>{creating ? "Creating..." : "Create disbursement"}</button>
       </form>

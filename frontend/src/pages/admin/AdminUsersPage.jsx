@@ -110,7 +110,20 @@ export default function AdminUsersPage() {
       <form onSubmit={handleCreate} style={{ display: "grid", gap: 12, maxWidth: 560, margin: "20px 0" }}>
         <label>Username<input required minLength={3} maxLength={64} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
         <label>Email<input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
-        <label>Password<input required minLength={6} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
+        <label>
+          Password
+          <input
+            required
+            minLength={8}
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}"
+            title="Use at least 8 characters with uppercase and lowercase letters, a number, and a special character."
+            autoComplete="new-password"
+            type="password"
+            value={form.password}
+            onChange={(event) => setForm({ ...form, password: event.target.value })}
+          />
+          <small>At least 8 characters with uppercase and lowercase letters, a number, and a special character.</small>
+        </label>
         <label>Role<select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
           {ROLE_DEFINITIONS.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}
         </select></label>
@@ -178,12 +191,15 @@ export default function AdminUsersPage() {
                   New password
                   <input
                     type="password"
-                    minLength={6}
+                    minLength={8}
+                    pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}"
                     autoComplete="new-password"
+                    title="Use at least 8 characters with uppercase and lowercase letters, a number, and a special character."
                     value={editForm.password}
                     onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
                     placeholder="Leave blank to keep the current password"
                   />
+                  <small>When changing it, use at least 8 characters with uppercase and lowercase letters, a number, and a special character.</small>
                 </label>
                 <label>
                   Role

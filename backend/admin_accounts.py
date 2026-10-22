@@ -10,8 +10,25 @@ from .db import connect_database
 
 ROLES = ("admin", "manager", "staff")
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,64}$")
-MIN_PASSWORD_LENGTH = 6
+MIN_PASSWORD_LENGTH = 8
+PASSWORD_POLICY_MESSAGE = (
+    "Password must be at least 8 characters and include an uppercase letter, "
+    "a lowercase letter, a number, and a special character."
+)
 BOOTSTRAP_LOCK_ID = 726381942105
+
+
+def _validate_password(password):
+    if not isinstance(password, str) or not password:
+        raise ValueError("Password is required.")
+    if (
+        len(password) < MIN_PASSWORD_LENGTH
+        or not re.search(r"[A-Z]", password)
+        or not re.search(r"[a-z]", password)
+        or not re.search(r"[0-9]", password)
+        or not re.search(r"[^A-Za-z0-9\s]", password)
+    ):
+        raise ValueError(PASSWORD_POLICY_MESSAGE)
 
 
 def _validate_account(username, email, password, role):
@@ -19,8 +36,7 @@ def _validate_account(username, email, password, role):
         raise ValueError("Username is required.")
     if not isinstance(email, str) or not email.strip():
         raise ValueError("Email is required.")
-    if not isinstance(password, str) or not password:
-        raise ValueError("Password is required.")
+    _validate_password(password)
     if role is None or role == "":
         raise ValueError(f"Role is required. Choose one of: {', '.join(ROLES)}.")
     username = username.strip()
@@ -30,8 +46,6 @@ def _validate_account(username, email, password, role):
         raise ValueError("Username must be 3-64 characters using only letters, digits, '.', '_' or '-'.")
     if not email or len(email) > 254 or "@" not in email:
         raise ValueError("Enter a valid email address.")
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
     if role not in ROLES:
         raise ValueError(f"Role must be one of: {', '.join(ROLES)}.")
 
@@ -144,10 +158,7 @@ def update_account(admin_user_id, user_id, updates, *, database_url=None):
 
     if "password" in updates:
         password = updates["password"]
-        if not isinstance(password, str) or not password:
-            raise ValueError("Password cannot be empty.")
-        if len(password) < MIN_PASSWORD_LENGTH:
-            raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+        _validate_password(password)
         changes["password_hash"] = generate_password_hash(password)
 
     with connect_database(database_url) as connection:

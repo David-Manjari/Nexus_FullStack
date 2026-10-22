@@ -11,9 +11,40 @@ def test_store_manager_is_not_a_supported_role():
             1,
             "old-role",
             "old-role@example.com",
-            "safe-password",
+            "Safe-Pass1",
             "store_manager",
         )
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "Short1!",
+        "alllowercase1!",
+        "ALLUPPERCASE1!",
+        "NoNumber!!",
+        "NoSpecial1",
+        "Has space1A ",
+    ],
+)
+def test_account_password_must_meet_complexity_policy(password):
+    with pytest.raises(ValueError, match="at least 8 characters"):
+        admin_accounts._validate_account(
+            "valid-user",
+            "valid@example.com",
+            password,
+            "staff",
+        )
+
+
+@pytest.mark.parametrize("password", ["Strong-Pass1", "Good!Pass2"])
+def test_account_password_meets_complexity_policy(password):
+    assert admin_accounts._validate_account(
+        "valid-user",
+        "valid@example.com",
+        password,
+        "staff",
+    ) == ("valid-user", "valid@example.com")
 
 
 class FakeResult:
@@ -62,3 +93,12 @@ def test_admin_account_role_cannot_be_changed(monkeypatch, is_active):
         admin_accounts.update_account(1, 2, {"role": "manager"})
 
     assert not any("UPDATE" in str(statement) for statement, _ in connection.statements)
+
+
+def test_password_update_must_meet_complexity_policy():
+    with pytest.raises(ValueError, match="at least 8 characters"):
+        admin_accounts.update_account(
+            1,
+            2,
+            {"password": "weakpass1!"},
+        )

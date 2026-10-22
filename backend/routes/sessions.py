@@ -6,7 +6,6 @@ from a secure environment variable before serving requests.
 
 from flask import Blueprint, jsonify, request, session
 
-from ..admin_accounts import MIN_PASSWORD_LENGTH
 from ..db import connect_database
 from ..user_login import AuthenticationError, authenticate_user
 
@@ -27,10 +26,6 @@ def login():
         return jsonify(error="Username or email is required."), 400
     if not isinstance(password, str) or not password:
         return jsonify(error="Password is required."), 400
-    if len(password) < MIN_PASSWORD_LENGTH:
-        return jsonify(
-            error=f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
-        ), 400
 
     try:
         user = authenticate_user(identifier, password)

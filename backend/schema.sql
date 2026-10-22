@@ -165,13 +165,20 @@ CREATE TABLE IF NOT EXISTS "Disbursements" (
     procurement_id     INTEGER UNIQUE REFERENCES "Procurements"(procurement_id),
     reference          VARCHAR(100) UNIQUE,
     payee              VARCHAR(200),
+    recipient_phone    VARCHAR(16),
     amount             NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
     currency           VARCHAR(3) NOT NULL DEFAULT 'KES',
     description        TEXT NOT NULL DEFAULT '',
     status             VARCHAR(12) NOT NULL DEFAULT 'pending'
                        CHECK (status IN ('pending', 'processing', 'success', 'paid', 'failed')),
+    provider           VARCHAR(30) NOT NULL DEFAULT 'legacy_simulator',
+    daraja_conversation_id            VARCHAR(100),
+    daraja_originator_conversation_id VARCHAR(100),
+    daraja_transaction_id             VARCHAR(100),
+    provider_status_message TEXT,
     payment_reference  VARCHAR(100),
     failure_reason     TEXT,
+    submitted_by       INTEGER REFERENCES "Users"(user_id),
     paid_by            INTEGER REFERENCES "Users"(user_id),
     paid_at            TIMESTAMPTZ,
     receipt_ref        VARCHAR(100),
@@ -180,6 +187,25 @@ CREATE TABLE IF NOT EXISTS "Disbursements" (
     CHECK (procurement_id IS NOT NULL OR (reference IS NOT NULL AND payee IS NOT NULL)),
     CHECK (reference IS NULL OR amount > 0)
 );
+
+ALTER TABLE "Disbursements"
+    ADD COLUMN IF NOT EXISTS recipient_phone VARCHAR(16),
+    ADD COLUMN IF NOT EXISTS provider VARCHAR(30) NOT NULL DEFAULT 'legacy_simulator',
+    ADD COLUMN IF NOT EXISTS daraja_conversation_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS daraja_originator_conversation_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS daraja_transaction_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS provider_status_message TEXT,
+    ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES "Users"(user_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS disbursements_daraja_conversation_idx
+    ON "Disbursements"(daraja_conversation_id)
+    WHERE daraja_conversation_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS disbursements_daraja_originator_idx
+    ON "Disbursements"(daraja_originator_conversation_id)
+    WHERE daraja_originator_conversation_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS disbursements_daraja_transaction_idx
+    ON "Disbursements"(daraja_transaction_id)
+    WHERE daraja_transaction_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS "Payment_History" (
     history_id         SERIAL PRIMARY KEY,

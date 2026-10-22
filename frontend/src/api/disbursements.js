@@ -7,12 +7,14 @@ function mapDisbursement(item) {
   return {
     id: item.disbursement_id,
     recipient: item.payee,
+    recipientPhone: item.recipient_phone,
     reference: item.reference,
     amount: `${item.currency} ${Number(item.amount).toLocaleString()}`,
     date: item.created_at,
     status,
     description: item.description,
     failureReason: item.failure_reason,
+    providerMessage: item.provider_status_message,
   };
 }
 
@@ -26,6 +28,7 @@ export async function createDisbursement(fields) {
     method: "POST",
     body: {
       payee: fields.payee,
+      recipient_phone: fields.recipientPhone,
       amount: Number(fields.amount),
       currency: fields.currency,
       description: fields.description,
@@ -34,10 +37,9 @@ export async function createDisbursement(fields) {
   return mapDisbursement(item);
 }
 
-export async function processDisbursement(id, simulatedResult) {
+export async function processDisbursement(id) {
   const { disbursement } = await apiRequest(`/api/disbursements/${id}/process`, {
     method: "POST",
-    body: { simulated_result: simulatedResult },
   });
   return mapDisbursement(disbursement);
 }
