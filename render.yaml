@@ -26,6 +26,8 @@ services:
         generateValue: true
       - key: SESSION_COOKIE_SECURE
         value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: "None"
       - key: FRONTEND_ORIGINS
         value: https://nexus-fullstack-1-lw0u.onrender.com
       - key: DARAJA_B2C_ENABLED
