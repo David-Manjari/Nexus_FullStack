@@ -29,6 +29,9 @@ def roles_required(*allowed_roles):
                 session.clear()
                 return jsonify(error="Authentication is required."), 401
 
+            if session.get("mfa_verified") is not True:
+                return jsonify(error="Complete two-factor authentication first."), 401
+
             role = user["role"]
             session["role"] = role
             if role not in allowed_roles:

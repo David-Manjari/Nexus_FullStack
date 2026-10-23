@@ -5,11 +5,16 @@ import { ROLE_DEFINITIONS } from "../../roles";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, user } = useAuth();
+  const { login, verifyMfa, completeLogin, user } = useAuth();
   const [form, setForm] = useState({
     email: "",
     password: "",
   });
+  const [step, setStep] = useState("credentials");
+  const [setup, setSetup] = useState(null);
+  const [code, setCode] = useState("");
+  const [verifiedUser, setVerifiedUser] = useState(null);
+  const [recoveryCodes, setRecoveryCodes] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,14 +33,40 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      // Let Flask validate credentials and provide the session cookie.
-      await login(form);
-      navigate("/dashboard", { replace: true });
+      const response = await login(form);
+      setSetup(response.setup ?? null);
+      setStep("mfa");
     } catch (submitError) {
       setError(submitError.message || "Unable to log in.");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleMfaSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const response = await verifyMfa(code);
+      if (response.recovery_codes) {
+        setVerifiedUser(response.user);
+        setRecoveryCodes(response.recovery_codes);
+        setStep("recovery");
+      } else {
+        completeLogin(response.user);
+        navigate("/dashboard", { replace: true });
+      }
+    } catch (submitError) {
+      setError(submitError.message || "Could not verify your code.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRecoverySaved = () => {
+    completeLogin(verifiedUser);
+    navigate("/dashboard", { replace: true });
   };
 
   return (
@@ -96,7 +127,7 @@ export default function LoginPage() {
           boxShadow: "0 20px 40px rgba(15, 23, 42, 0.35)",
         }}>
           <h2 style={{ marginTop: 0 }}>Welcome back</h2>
-          <form onSubmit={handleSubmit} style={{ display: "grid", gap: "16px" }}>
+          {step === "credentials" && <form onSubmit={handleSubmit} style={{ display: "grid", gap: "16px" }}>
             <label style={{ display: "grid", gap: "8px" }}>
               <span>Email</span>
               <input
@@ -138,7 +169,71 @@ export default function LoginPage() {
             }}>
               {submitting ? "Signing in..." : "Sign in"}
             </button>
-          </form>
+          </form>}
+          {step === "mfa" && (
+            <div>
+              {setup && (
+                <div style={{ marginBottom: "18px" }}>
+                  <p>Two-factor authentication is required for every account. Add an account in your authenticator app using manual setup.</p>
+                  <p><strong>Account:</strong> {setup.account}</p>
+                  <p><strong>Issuer:</strong> {setup.issuer}</p>
+                  <p><strong>Setup key:</strong></p>
+                  <code style={{ display: "block", overflowWrap: "anywhere", padding: "12px", background: "#f1f5f9", borderRadius: "8px" }}>
+                    {setup.secret}
+                  </code>
+                  <p>Enter the six-digit code from the app to finish setup. Save the recovery codes shown after verification.</p>
+                </div>
+              )}
+              {!setup && <p>Enter a six-digit authenticator code or one of your recovery codes.</p>}
+              <form onSubmit={handleMfaSubmit} style={{ display: "grid", gap: "16px" }}>
+                <label style={{ display: "grid", gap: "8px" }}>
+                  <span>{setup ? "Authenticator code" : "Authenticator or recovery code"}</span>
+                  <input
+                    name="code"
+                    type="text"
+                    autoComplete="one-time-code"
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                    required
+                    maxLength={64}
+                    autoFocus
+                    style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+                  />
+                </label>
+                {error && <div role="alert" style={{ background: "#fef2f2", color: "#b91c1c", borderRadius: "10px", padding: "10px 12px" }}>{error}</div>}
+                <button type="submit" disabled={submitting} style={{
+                  background: "#2563eb",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  fontSize: "1rem",
+                  cursor: "pointer",
+                }}>
+                  {submitting ? "Verifying..." : "Verify and continue"}
+                </button>
+              </form>
+            </div>
+          )}
+          {step === "recovery" && (
+            <div>
+              <p><strong>Save these recovery codes somewhere safe.</strong> Each code works once if you lose access to your authenticator. They will not be shown again.</p>
+              <ul aria-label="Recovery codes" style={{ columns: 2, fontFamily: "monospace" }}>
+                {recoveryCodes.map((recoveryCode) => <li key={recoveryCode}>{recoveryCode}</li>)}
+              </ul>
+              <button type="button" onClick={handleRecoverySaved} style={{
+                background: "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: "10px",
+                padding: "12px 16px",
+                fontSize: "1rem",
+                cursor: "pointer",
+              }}>
+                I saved my recovery codes
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </div>

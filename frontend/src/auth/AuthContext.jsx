@@ -39,11 +39,19 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async ({ email, password }) => {
-    // The backend owns credential validation and sets the session cookie.
-    const { user: sessionUser } = await apiRequest("/session/login", {
+    return apiRequest("/session/login", {
       method: "POST",
       body: { identifier: email, password },
     });
+  };
+
+  const verifyMfa = async (code) =>
+    apiRequest("/session/2fa/verify", {
+      method: "POST",
+      body: { code },
+    });
+
+  const completeLogin = (sessionUser) => {
     const mappedUser = mapUser(sessionUser);
     setUser(mappedUser);
     return mappedUser;
@@ -62,6 +70,8 @@ export function AuthProvider({ children }) {
       user,
       loading,
       login,
+      verifyMfa,
+      completeLogin,
       logout,
       isAuthenticated: !!user,
     }),

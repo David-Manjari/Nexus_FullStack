@@ -10,6 +10,15 @@ CREATE TABLE IF NOT EXISTS "Users" (
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE "Users"
+    ADD COLUMN IF NOT EXISTS mfa_secret TEXT,
+    ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS mfa_recovery_hashes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS mfa_failed_attempts INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS mfa_locked_until TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS mfa_pending_expires_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS mfa_challenge_hash TEXT;
+
 ALTER TABLE "Users" DROP CONSTRAINT IF EXISTS users_role_check;
 UPDATE "Users" SET role = 'staff' WHERE role = 'store_manager';
 ALTER TABLE "Users" ADD CONSTRAINT users_role_check
