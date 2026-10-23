@@ -13,8 +13,10 @@ export default function AdminUsersPage() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ username: "", email: "", password: "", role: "staff" });
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editForm, setEditForm] = useState({ username: "", email: "", password: "", role: "staff" });
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [editError, setEditError] = useState("");
   const [updating, setUpdating] = useState(false);
 
@@ -42,6 +44,7 @@ export default function AdminUsersPage() {
       // Account creation now uses the backend's validated role and password rules.
       await createUser(form);
       setForm({ username: "", email: "", password: "", role: "staff" });
+      setShowCreatePassword(false);
       await loadUsers();
     } catch (createError) {
       setError(createError.message || "Could not create account.");
@@ -69,6 +72,7 @@ export default function AdminUsersPage() {
       password: "",
       role: member.role,
     });
+    setShowEditPassword(false);
     setEditError("");
   }
 
@@ -76,6 +80,7 @@ export default function AdminUsersPage() {
     setEditingUserId(null);
     setEditError("");
     setEditForm({ username: "", email: "", password: "", role: "staff" });
+    setShowEditPassword(false);
   }
 
   async function handleUpdate(event) {
@@ -112,16 +117,27 @@ export default function AdminUsersPage() {
         <label>Email<input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
         <label>
           Password
-          <input
-            required
-            minLength={8}
-            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}"
-            title="Use at least 8 characters with uppercase and lowercase letters, a number, and a special character."
-            autoComplete="new-password"
-            type="password"
-            value={form.password}
-            onChange={(event) => setForm({ ...form, password: event.target.value })}
-          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              required
+              minLength={8}
+              pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}"
+              title="Use at least 8 characters with uppercase and lowercase letters, a number, and a special character."
+              autoComplete="new-password"
+              type={showCreatePassword ? "text" : "password"}
+              value={form.password}
+              onChange={(event) => setForm({ ...form, password: event.target.value })}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <button
+              type="button"
+              aria-label={showCreatePassword ? "Hide password" : "Show password"}
+              aria-pressed={showCreatePassword}
+              onClick={() => setShowCreatePassword((visible) => !visible)}
+            >
+              {showCreatePassword ? "Hide" : "Show"}
+            </button>
+          </div>
           <small>At least 8 characters with uppercase and lowercase letters, a number, and a special character.</small>
         </label>
         <label>Role<select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
@@ -189,16 +205,27 @@ export default function AdminUsersPage() {
                 </label>
                 <label>
                   New password
-                  <input
-                    type="password"
-                    minLength={8}
-                    pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}"
-                    autoComplete="new-password"
-                    title="Use at least 8 characters with uppercase and lowercase letters, a number, and a special character."
-                    value={editForm.password}
-                    onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
-                    placeholder="Leave blank to keep the current password"
-                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type={showEditPassword ? "text" : "password"}
+                      minLength={8}
+                      pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}"
+                      autoComplete="new-password"
+                      title="Use at least 8 characters with uppercase and lowercase letters, a number, and a special character."
+                      value={editForm.password}
+                      onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
+                      placeholder="Leave blank to keep the current password"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <button
+                      type="button"
+                      aria-label={showEditPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showEditPassword}
+                      onClick={() => setShowEditPassword((visible) => !visible)}
+                    >
+                      {showEditPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
                   <small>When changing it, use at least 8 characters with uppercase and lowercase letters, a number, and a special character.</small>
                 </label>
                 <label>

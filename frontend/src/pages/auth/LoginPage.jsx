@@ -10,6 +10,7 @@ export default function LoginPage() {
     email: "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState("credentials");
   const [setup, setSetup] = useState(null);
   const [code, setCode] = useState("");
@@ -142,14 +143,25 @@ export default function LoginPage() {
 
             <label style={{ display: "grid", gap: "8px" }}>
               <span>Password</span>
-              <input
-                name="password"
-                type="password"
-                value={form.password}
-                onChange={handleChange}
-                required
-                style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
-              />
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={form.password}
+                  onChange={handleChange}
+                  required
+                  style={{ flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
             </label>
 
             {error && (

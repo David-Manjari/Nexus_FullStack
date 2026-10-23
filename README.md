@@ -109,13 +109,30 @@ flask --app backend.app:create_app run --debug
 
 The API is available at `http://localhost:5000`; the health check is `http://localhost:5000/health`.
 
+## Free Render demo deployment
+
+The root [render.yaml](render.yaml) describes a free Render static frontend, free Flask web service, and free PostgreSQL database. To deploy, push the repository to GitHub, sign in to Render, choose **New > Blueprint**, connect the repository, and apply the Blueprint.
+
+The free PostgreSQL database is temporary and is deleted after 30 days. The free backend may sleep when idle, so its first request after inactivity can be delayed. Export the database or migrate it before the 30-day expiry if you need to retain data. This setup is for a short demo, not production or durable storage.
+
+After the services are created, bootstrap the first admin from a trusted local terminal using the database's external connection URL from the Render dashboard. Enter the URL without echoing it or saving it in shell history:
+
+```bash
+read -r -s -p 'Render external DATABASE_URL: ' DATABASE_URL
+echo
+export DATABASE_URL
+python -m backend.admin_accounts bootstrap-admin --username your-admin-name --email you@example.com
+```
+
+The command prompts for a password and confirmation; do not use the local demo credentials. The generated `SECRET_KEY` must be kept stable across deploys, since MFA secrets are encrypted using it. Daraja payouts remain disabled in this demo by default. The default frontend and backend URLs in `render.yaml` assume the service names shown there; update `FRONTEND_ORIGINS` and `VITE_API_BASE_URL` if Render assigns different hostnames or you rename either service.
+
 ## Future Improvements
 
 - Implement reporting for the manager or owner
 - Streamline access for the users while restricting others
 - Add dashboard analytics for all users
 - Create a company wide database.
-- Deploy the application
+- Add durable production hosting and database backups
 
 ## License
 
