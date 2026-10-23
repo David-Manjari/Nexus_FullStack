@@ -34,8 +34,9 @@ services:
   - type: web
     name: nexus-demo-frontend
     runtime: static
-    buildCommand: cd frontend && npm ci --include=dev && npm run build
-    staticPublishPath: frontend/dist
+    rootDir: frontend
+    buildCommand: npm ci --include=dev && npm run build
+    staticPublishPath: dist
     envVars:
       - key: VITE_API_BASE_URL
         value: https://nexus-demo-api.onrender.com
