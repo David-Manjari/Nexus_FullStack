@@ -31,7 +31,7 @@ services:
       - key: FRONTEND_ORIGINS
         value: https://nexus-fullstack-1-lw0u.onrender.com
       - key: DARAJA_B2C_ENABLED
-        value: "false"
+        value: "true"
 
   - type: web
     name: nexus-demo-frontend
