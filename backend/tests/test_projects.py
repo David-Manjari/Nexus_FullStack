@@ -25,6 +25,7 @@ class FakeConnection:
         self.statements = []
         self.staff = []
         self.approval_requests = []
+        self.notifications = []
 
     def execute(self, statement, params=()):
         self.statements.append((statement, params))
@@ -45,6 +46,11 @@ class FakeConnection:
                 if any(member["user_id"] == params[1] for member in self.staff)
                 else None
             )
+        if 'SELECT user_id FROM "Project_Staff_Assignments"' in statement:
+            return FakeResult(rows=[{"user_id": member["user_id"]} for member in self.staff])
+        if 'INSERT INTO "Notifications"' in statement:
+            self.notifications.append(params)
+            return FakeResult()
         if 'WHERE user_id = ANY(%s)' in statement:
             staff_ids = params[0]
             return FakeResult(rows=[{"user_id": staff_id} for staff_id in staff_ids])
@@ -192,7 +198,13 @@ def test_closed_project_rejects_project_field_changes(monkeypatch, status):
 
 
 def test_admin_can_assign_project_manager_before_approval(monkeypatch):
-    project = {"project_id": 17, "created_by": 1, "manager_id": None, "status": "draft"}
+    project = {
+        "project_id": 17,
+        "name": "Bridge repair",
+        "created_by": 1,
+        "manager_id": None,
+        "status": "draft",
+    }
     connection = FakeConnection(project)
     install_fake_connection(monkeypatch, connection)
 
@@ -200,6 +212,28 @@ def test_admin_can_assign_project_manager_before_approval(monkeypatch):
 
     assert result["project"]["manager_id"] == 4
     assert any('UPDATE "Projects" SET manager_id' in statement for statement, _ in connection.statements)
+
+
+def test_new_project_team_members_are_notified_once(monkeypatch):
+    project = {
+        "project_id": 17,
+        "name": "Bridge repair",
+        "created_by": 1,
+        "manager_id": None,
+        "status": "approved",
+    }
+    connection = FakeConnection(project)
+    connection.staff = [{"user_id": 5, "username": "staff5", "role": "staff"}]
+    install_fake_connection(monkeypatch, connection)
+
+    workflow.update_project_team(
+        17, {"manager_id": 4, "staff_ids": [5, 6]}, 9, "admin"
+    )
+
+    assert connection.notifications == [
+        (4, "You were assigned as project manager for Bridge repair.", "project_assigned"),
+        (6, "You were assigned to project Bridge repair.", "project_assigned"),
+    ]
 
 
 def test_draft_project_cannot_be_approved_without_approval_chain(monkeypatch):
@@ -253,7 +287,13 @@ def test_project_submission_preserves_ordered_approval_chain(monkeypatch):
 
 
 def test_admin_can_assign_project_manager_and_staff_after_approval(monkeypatch):
-    project = {"project_id": 17, "created_by": 1, "manager_id": None, "status": "approved"}
+    project = {
+        "project_id": 17,
+        "name": "Bridge repair",
+        "created_by": 1,
+        "manager_id": None,
+        "status": "approved",
+    }
     connection = FakeConnection(project)
     install_fake_connection(monkeypatch, connection)
 

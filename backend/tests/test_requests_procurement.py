@@ -153,6 +153,12 @@ def test_asset_out_of_stock_creates_procurement_draft(world):
     assert body["procurement"]["quantity"] == 2
     assert body["procurement"]["request_id"] == body["request"]["request_id"]
     assert body["procurement"]["raised_by"] == world.users["staff"]
+    notifications = world.client("staff").get("/notifications").get_json()["notifications"]
+    assert any(
+        item["notif_type"] == "request_procurement"
+        and f"request #{body['request']['request_id']}" in item["message"]
+        for item in notifications
+    )
 
 
 def test_asset_in_maintenance_counts_as_unavailable(world):
@@ -296,6 +302,13 @@ def test_manager_fulfils_and_asset_is_assigned(world):
     assert asset["status"] == "assigned"
     assert assignment["user_id"] == world.users["staff"]
     assert assignment["request_id"] == request_id
+    notifications = world.client("staff").get("/notifications").get_json()["notifications"]
+    assert any(
+        item["notif_type"] == "request_fulfilled"
+        and f"request #{request_id}" in item["message"]
+        and name in item["message"]
+        for item in notifications
+    )
 
     again = world.client("manager").patch(f"/requests/{request_id}/fulfil")
     assert again.status_code == 409

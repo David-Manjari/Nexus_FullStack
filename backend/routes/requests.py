@@ -231,6 +231,12 @@ def create_request():
                     connection, new_id, raised_by=user_id,
                     request_note="Item is not available. Procurement request created.",
                 )
+                create_notification(
+                    connection,
+                    user_id,
+                    f"Your asset request #{new_id} was sent to procurement.",
+                    "request_procurement",
+                )
         else:
             # Money and project requests go up to an approver.
             approver_id = pick_approver(connection, session["role"], user_id)
@@ -386,7 +392,12 @@ def fulfil_request(request_id):
             connection, session["user_id"], "request_fulfilled", "request", request_id,
             {"asset_id": asset_id, "issued_to": found["requested_by"]},
         )
-        # TODO: notify the requester once notifications exist.
+        create_notification(
+            connection,
+            found["requested_by"],
+            f"Your request #{request_id} was fulfilled: {asset['name']}.",
+            "request_fulfilled",
+        )
         row = connection.execute(
             f"{REQUEST_SELECT} WHERE r.request_id = %s", (request_id,)
         ).fetchone()

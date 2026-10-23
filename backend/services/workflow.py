@@ -3,6 +3,7 @@
 from datetime import date
 
 from ..admin_accounts import connect_database
+from .notifications import create_notification
 
 
 class WorkflowError(Exception):
@@ -263,6 +264,17 @@ def update_project_team(project_id, data, user_id, role):
 	with connect_database() as connection:
 		project = _project_for_user(connection, project_id, user_id, role, lock=True)
 		_ensure_project_open(project)
+		previous_manager_id = project.get("manager_id")
+		previous_staff_ids = set()
+		if "staff_ids" in data:
+			previous_staff_ids = {
+				row["user_id"]
+				for row in connection.execute(
+					'''SELECT user_id FROM "Project_Staff_Assignments"
+					   WHERE project_id = %s''',
+					(project_id,),
+				).fetchall()
+			}
 		if "manager_id" in data and manager_id is not None:
 			manager = connection.execute(
 				'''SELECT user_id FROM "Users"
@@ -287,6 +299,13 @@ def update_project_team(project_id, data, user_id, role):
 				   WHERE project_id = %s RETURNING *''',
 				(manager_id, project_id),
 			).fetchone()
+			if manager_id is not None and manager_id != previous_manager_id:
+				create_notification(
+					connection,
+					manager_id,
+					f"You were assigned as project manager for {project['name']}.",
+					"project_assigned",
+				)
 		if "staff_ids" in data:
 			connection.execute(
 				'''DELETE FROM "Project_Staff_Assignments" WHERE project_id = %s''',
@@ -299,6 +318,13 @@ def update_project_team(project_id, data, user_id, role):
 					   VALUES (%s, %s, %s)''',
 					(project_id, staff_id, user_id),
 				)
+				if staff_id not in previous_staff_ids:
+					create_notification(
+						connection,
+						staff_id,
+						f"You were assigned to project {project['name']}.",
+						"project_assigned",
+					)
 		assigned_staff = connection.execute(
 			'''SELECT u.user_id, u.username, u.role
 			   FROM "Project_Staff_Assignments" a
