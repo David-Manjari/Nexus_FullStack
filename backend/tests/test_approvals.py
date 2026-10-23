@@ -70,6 +70,7 @@ def people(app):
         client = app.test_client()
         with client.session_transaction() as session:
             session["user_id"] = user_id
+            session["mfa_verified"] = True
         clients[role] = client
     try:
         yield {"tag": tag, "ids": ids, "clients": clients, "approvals": approvals}

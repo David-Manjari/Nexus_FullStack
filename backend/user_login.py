@@ -24,7 +24,7 @@ def authenticate_user(identifier, password, *, database_url=None):
     with connect_database(database_url) as connection:
         user = connection.execute(
             """
-            SELECT user_id, username, email, password_hash, role, is_active
+            SELECT user_id, username, email, password_hash, role, is_active, mfa_enabled
             FROM "Users"
             WHERE username = %s OR email = %s
             LIMIT 1
@@ -48,4 +48,5 @@ def authenticate_user(identifier, password, *, database_url=None):
         "username": user["username"],
         "email": user["email"],
         "role": user["role"],
+        "mfa_enabled": user["mfa_enabled"],
     }

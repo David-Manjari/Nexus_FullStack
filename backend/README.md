@@ -7,6 +7,7 @@ Nexus is a role-aware operations API for organizations coordinating inventory, f
 ## Backend capabilities
 
 - Session-based login and logout with role-aware, protected endpoints.
+- Required authenticator-app TOTP for every account, with one-time recovery codes.
 - PostgreSQL-backed user accounts, assets, projects, requests, procurement, approvals, disbursements, and audit data.
 - Asset inventory endpoints for listing, creating, editing, assignment, returns, and assignment history.
 - Request creation and status tracking, including automatic draft procurement creation when an asset is unavailable.
@@ -18,6 +19,8 @@ Nexus is a role-aware operations API for organizations coordinating inventory, f
 
 List endpoints return empty JSON collections when there are no matching records. Protected routes return `401` when authentication is missing and `403` when the signed-in role is not allowed. Other common responses include `400` for invalid input, `404` for missing or inaccessible records, `409` for conflicts, and `503` when the database is unavailable.
 
+Two-factor authentication is required for every account. `POST /session/login` begins a challenge after password validation. First-time enrollment returns a TOTP setup key; add it manually to an authenticator app and submit its six-digit code to `POST /session/2fa/verify` as `{"code":"123456"}`. Enrollment returns one-time recovery codes; save them because they are shown only once. Challenges expire after ten minutes, and repeated incorrect codes are temporarily locked. TOTP secrets are encrypted at rest using a key derived from `SECRET_KEY`; keep that key stable and backed up, since changing it makes existing authenticator secrets unreadable. Serve the login and enrollment flow over HTTPS outside local development.
+
 ## API routes
 
 The disbursement blueprint uses the `/api` prefix. Other routes do not. Route-level role checks apply as configured by the backend.
@@ -27,6 +30,7 @@ The disbursement blueprint uses the `/api` prefix. Other routes do not. Route-le
 | GET | `/` | API status |
 | GET | `/health` | Health check |
 | POST | `/session/login` | Start a session |
+| POST | `/session/2fa/verify` | Complete MFA enrollment or login with a TOTP/recovery code |
 | POST | `/session/logout` | End a session |
 | GET | `/users/accounts` | List accounts (admin) |
 | GET | `/users/accounts/<int:user_id>` | Get an account (admin) |
@@ -98,13 +102,14 @@ The integration is disabled by default. Start from the root `.env.example` and s
 
 Configure the same callback base URL and token in the Daraja request callback URLs. For local development, use an HTTPS tunnel to the backend; do not expose the frontend or use plain HTTP. Generate the security credential using Safaricom's sandbox certificate and instructions; do not store the initiator password or credentials in source control.
 
-Payout creation accepts Kenyan mobile numbers and whole KES amounts from 1 through 70,000. A separate admin/manager must approve the payout, and the approver cannot submit it. Submission moves the item to `processing`; only a correlated Daraja callback with a matching amount and transaction receipt marks it paid. A timeout or ambiguous network response remains `processing` and must be reconciled before anyone retries. Do not assume a successful submission response means the payout completed. The callback token is an additional shared-secret guard, not a Daraja callback signature; callback transaction IDs and amount are also checked.
+Payout creation accepts Kenyan mobile numbers and whole KES amounts from 1 through 70,000. An admin/manager must approve the payout; the requester cannot approve their own payout. The same approver may submit the approved payout to Daraja. Submission moves the item to `processing`; only a correlated Daraja callback with a matching amount and transaction receipt marks it paid. A timeout or ambiguous network response remains `processing` and must be reconciled before anyone retries. Do not assume a successful submission response means the payout completed. The callback token is an additional shared-secret guard, not a Daraja callback signature; callback transaction IDs and amount are also checked.
 
 The B2C client uses only `https://sandbox.safaricom.co.ke`. Sandbox test values and behavior are controlled by Safaricom and may differ from production. No live-money credentials or production endpoint should be added to this integration.
 
 | Method and path | Body keys |
 |---|---|
 | `POST /session/login` | `identifier` or `username` or `email`, and `password` (required; JSON or form data) |
+| `POST /session/2fa/verify` | `code` (required: six-digit TOTP or one-time recovery code) |
 | `POST /users/accounts` | `username`, `email`, `password`, `role` (all required) |
 | `PATCH /users/accounts/<int:user_id>` | `username`, `email`, `password`, `role`, `is_active` (at least one required) |
 | `POST /approvals/<int:approval_id>/decision` | `decision` (required: `approved` or `rejected`), `comments` |

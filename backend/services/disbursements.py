@@ -12,7 +12,7 @@ from ..integrations.daraja_b2c import (
 from .audit import record_audit, record_payment_history
 
 
-def _approved_disbursement(connection, disbursement_id, user_id):
+def _approved_disbursement(connection, disbursement_id):
     approval = connection.execute(
         '''SELECT approval_id, requested_by, decided_by
            FROM "Approval_Items"
@@ -28,8 +28,6 @@ def _approved_disbursement(connection, disbursement_id, user_id):
         raise ValueError("This payout must be approved before it can be sent.")
     if approval["decided_by"] == approval["requested_by"]:
         raise ValueError("The requester cannot approve their own payout.")
-    if approval["decided_by"] == user_id:
-        raise ValueError("A different authorized user must submit the approved payout.")
 
 
 def submit_disbursement(disbursement_id, *, user_id):
@@ -65,7 +63,7 @@ def submit_disbursement(disbursement_id, *, user_id):
             r"254[17]\d{8}", row["recipient_phone"]
         ):
             raise ValueError("Payout has no valid Kenyan mobile number.")
-        _approved_disbursement(connection, disbursement_id, user_id)
+        _approved_disbursement(connection, disbursement_id)
 
         connection.execute(
             '''UPDATE "Disbursements"
