@@ -1,6 +1,33 @@
 import pytest
 
 from backend.app import create_app
+from backend.services.disbursements import _approved_disbursement
+
+
+class FakeApprovalConnection:
+    def __init__(self, approval):
+        self.approval = approval
+
+    def execute(self, statement, params):
+        assert "FROM \"Approval_Items\"" in statement
+        assert params == (42,)
+        return self
+
+    def fetchone(self):
+        return self.approval
+
+
+def test_approver_can_submit_their_approved_disbursement():
+    approval = {"requested_by": 7, "decided_by": 9}
+
+    _approved_disbursement(FakeApprovalConnection(approval), 42)
+
+
+def test_requester_still_cannot_approve_their_own_disbursement():
+    approval = {"requested_by": 9, "decided_by": 9}
+
+    with pytest.raises(ValueError, match="requester cannot approve"):
+        _approved_disbursement(FakeApprovalConnection(approval), 42)
 
 
 @pytest.fixture

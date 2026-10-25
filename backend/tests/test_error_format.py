@@ -37,6 +37,7 @@ def clients(app):
             client = app.test_client()
             with client.session_transaction() as session:
                 session["user_id"] = user_id
+                session["mfa_verified"] = True
             made[role] = client
     try:
         yield made

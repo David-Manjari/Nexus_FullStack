@@ -6,6 +6,7 @@ import hmac
 import secrets
 import struct
 import time
+from urllib.parse import quote, urlencode
 
 from cryptography.fernet import Fernet
 from flask import current_app
@@ -13,6 +14,20 @@ from flask import current_app
 
 def generate_totp_secret():
     return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+
+
+def build_totp_uri(secret, account_name, issuer="Nexus"):
+    label = quote(f"{issuer}:{account_name}", safe="")
+    parameters = urlencode(
+        {
+            "secret": secret,
+            "issuer": issuer,
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+        }
+    )
+    return f"otpauth://totp/{label}?{parameters}"
 
 
 def _fernet():

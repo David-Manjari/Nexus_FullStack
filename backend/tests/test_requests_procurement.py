@@ -39,6 +39,7 @@ def world(app):
         with client.session_transaction() as sess:
             sess["user_id"] = user_id
             sess["role"] = role
+            sess["mfa_verified"] = True
         return client
 
     def client_for(role):

@@ -1,11 +1,18 @@
 import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { ROLE_DEFINITIONS } from "../../roles";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, verifyMfa, completeLogin, user } = useAuth();
+  const {
+    login,
+    setupTotp,
+    verifyMfaMethod,
+    completeLogin,
+    user,
+  } = useAuth();
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -13,6 +20,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState("credentials");
   const [setup, setSetup] = useState(null);
+  const [mfaOptions, setMfaOptions] = useState(null);
+  const [mfaMethod, setMfaMethod] = useState("");
   const [code, setCode] = useState("");
   const [verifiedUser, setVerifiedUser] = useState(null);
   const [recoveryCodes, setRecoveryCodes] = useState([]);
@@ -35,10 +44,29 @@ export default function LoginPage() {
 
     try {
       const response = await login(form);
-      setSetup(response.setup ?? null);
+      setMfaOptions(response);
+      setSetup(null);
+      setMfaMethod("qr");
+      setCode("");
       setStep("mfa");
     } catch (submitError) {
       setError(submitError.message || "Unable to log in.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleChooseTotp = async () => {
+    setError("");
+    setSubmitting(true);
+    try {
+      if (!mfaOptions.totp_available) {
+        const response = await setupTotp();
+        setSetup(response.setup);
+      }
+      setMfaMethod("totp");
+    } catch (submitError) {
+      setError(submitError.message || "Could not set up an authenticator.");
     } finally {
       setSubmitting(false);
     }
@@ -49,7 +77,7 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      const response = await verifyMfa(code);
+      const response = await verifyMfaMethod(code, mfaMethod);
       if (response.recovery_codes) {
         setVerifiedUser(response.user);
         setRecoveryCodes(response.recovery_codes);
@@ -68,6 +96,15 @@ export default function LoginPage() {
   const handleRecoverySaved = () => {
     completeLogin(verifiedUser);
     navigate("/dashboard", { replace: true });
+  };
+
+  const handleStartOver = () => {
+    setSetup(null);
+    setMfaOptions(null);
+    setMfaMethod("");
+    setCode("");
+    setError("");
+    setStep("credentials");
   };
 
   return (
@@ -184,10 +221,49 @@ export default function LoginPage() {
           </form>}
           {step === "mfa" && (
             <div>
+              {!mfaMethod && (
+                <div style={{ display: "grid", gap: "12px" }}>
+                  <p>
+                    Select a way to continue signing in.
+                  </p>
+                  <button type="button" onClick={() => setMfaMethod("qr")}>
+                    Use QR sign-in code
+                  </button>
+                  <button type="button" disabled={submitting} onClick={handleChooseTotp}>
+                    {mfaOptions?.totp_available
+                      ? "Use authenticator app"
+                      : "Set up authenticator app backup"}
+                  </button>
+                  {error && <div role="alert" style={{ background: "#fef2f2", color: "#b91c1c", borderRadius: "10px", padding: "10px 12px" }}>{error}</div>}
+                </div>
+              )}
+              {mfaMethod === "qr" && (
+                <div style={{ marginBottom: "18px" }}>
+                  <p>Scan this QR code with your phone camera or any QR scanner, then enter the code it displays.</p>
+                  <div style={{ display: "flex", justifyContent: "center", padding: "16px" }}>
+                    <QRCodeSVG
+                      value={mfaOptions.qr_code}
+                      size={220}
+                      level="M"
+                      title="One-time sign-in code"
+                    />
+                  </div>
+                  <p>This sign-in code expires in five minutes and can only be used once. Anyone who scans it can use it for this sign-in; it does not verify the scanner's identity.</p>
+                </div>
+              )}
               {setup && (
                 <div style={{ marginBottom: "18px" }}>
-                  <p>Two-factor authentication is required for every account. Add an account in your authenticator app using manual setup.</p>
-                  <p><strong>Account:</strong> {setup.account}</p>
+                  <p>Scan this QR code with your authenticator app, then enter the six-digit code it generates.</p>
+                  <div style={{ display: "flex", justifyContent: "center", padding: "16px" }}>
+                    <QRCodeSVG
+                      value={setup.otpauth_url}
+                      size={220}
+                      level="M"
+                      title="Authenticator app setup QR code"
+                    />
+                  </div>
+                  <p>If you cannot scan the code, add the account manually:</p>
+                  <p><strong>Account:</strong> {form.email}</p>
                   <p><strong>Issuer:</strong> {setup.issuer}</p>
                   <p><strong>Setup key:</strong></p>
                   <code style={{ display: "block", overflowWrap: "anywhere", padding: "12px", background: "#f1f5f9", borderRadius: "8px" }}>
@@ -196,10 +272,22 @@ export default function LoginPage() {
                   <p>Enter the six-digit code from the app to finish setup. Save the recovery codes shown after verification.</p>
                 </div>
               )}
-              {!setup && <p>Enter a six-digit authenticator code or one of your recovery codes.</p>}
+              {mfaMethod === "totp" && !setup && (
+                <p>Enter the code from your authenticator app.</p>
+              )}
+              {mfaMethod === "recovery" && (
+                <p>Enter one of your unused recovery codes.</p>
+              )}
+              {mfaMethod && (
               <form onSubmit={handleMfaSubmit} style={{ display: "grid", gap: "16px" }}>
                 <label style={{ display: "grid", gap: "8px" }}>
-                  <span>{setup ? "Authenticator code" : "Authenticator or recovery code"}</span>
+                  <span>
+                    {mfaMethod === "recovery"
+                      ? "Recovery code"
+                      : mfaMethod === "qr"
+                        ? "QR sign-in code"
+                        : "Authenticator code"}
+                  </span>
                   <input
                     name="code"
                     type="text"
@@ -225,11 +313,36 @@ export default function LoginPage() {
                   {submitting ? "Verifying..." : "Verify and continue"}
                 </button>
               </form>
+              )}
+              {mfaMethod && (
+                <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
+                  {mfaMethod === "qr" && (
+                    <button type="button" disabled={submitting} onClick={handleChooseTotp}>
+                      {mfaOptions?.totp_available
+                        ? "Use authenticator app instead"
+                        : "Set up authenticator app backup"}
+                    </button>
+                  )}
+                  {mfaMethod !== "recovery" && (
+                    <button type="button" onClick={() => { setMfaMethod("recovery"); setCode(""); }}>
+                      Use a recovery code
+                    </button>
+                  )}
+                  {mfaMethod !== "qr" && (
+                    <button type="button" onClick={() => { setMfaMethod("qr"); setSetup(null); setCode(""); setError(""); }}>
+                      Use QR sign-in code
+                    </button>
+                  )}
+                  <button type="button" onClick={handleStartOver}>
+                    Start over
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {step === "recovery" && (
             <div>
-              <p><strong>Save these recovery codes somewhere safe.</strong> Each code works once if you lose access to your authenticator. They will not be shown again.</p>
+              <p><strong>Save these recovery codes somewhere safe.</strong> Each code works once if you lose access to your sign-in methods. They will not be shown again.</p>
               <ul aria-label="Recovery codes" style={{ columns: 2, fontFamily: "monospace" }}>
                 {recoveryCodes.map((recoveryCode) => <li key={recoveryCode}>{recoveryCode}</li>)}
               </ul>

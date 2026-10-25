@@ -45,10 +45,13 @@ export function AuthProvider({ children }) {
     });
   };
 
-  const verifyMfa = async (code) =>
+  const setupTotp = async () =>
+    apiRequest("/session/2fa/totp/setup", { method: "POST" });
+
+  const verifyMfaMethod = async (code, method) =>
     apiRequest("/session/2fa/verify", {
       method: "POST",
-      body: { code },
+      body: { code, method },
     });
 
   const completeLogin = (sessionUser) => {
@@ -70,7 +73,8 @@ export function AuthProvider({ children }) {
       user,
       loading,
       login,
-      verifyMfa,
+      setupTotp,
+      verifyMfaMethod,
       completeLogin,
       logout,
       isAuthenticated: !!user,
