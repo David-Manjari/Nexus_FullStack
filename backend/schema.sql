@@ -17,7 +17,14 @@ ALTER TABLE "Users"
     ADD COLUMN IF NOT EXISTS mfa_failed_attempts INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS mfa_locked_until TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS mfa_pending_expires_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS mfa_challenge_hash TEXT;
+    ADD COLUMN IF NOT EXISTS mfa_challenge_hash TEXT,
+    ADD COLUMN IF NOT EXISTS mfa_totp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS mfa_qr_code_hash TEXT,
+    ADD COLUMN IF NOT EXISTS mfa_qr_code_expires_at TIMESTAMPTZ;
+
+UPDATE "Users" SET mfa_totp_enabled = TRUE
+WHERE mfa_enabled = TRUE AND mfa_secret IS NOT NULL
+  AND mfa_totp_enabled = FALSE;
 
 ALTER TABLE "Users" DROP CONSTRAINT IF EXISTS users_role_check;
 UPDATE "Users" SET role = 'staff' WHERE role = 'store_manager';

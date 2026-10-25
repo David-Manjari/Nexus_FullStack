@@ -7,7 +7,7 @@ Nexus is a role-aware operations API for organizations coordinating inventory, f
 ## Backend capabilities
 
 - Session-based login and logout with role-aware, protected endpoints.
-- Required authenticator-app TOTP for every account, with one-time recovery codes.
+- Password sign-in followed by a one-time QR code, with authenticator-app TOTP as a backup.
 - PostgreSQL-backed user accounts, assets, projects, requests, procurement, approvals, disbursements, and audit data.
 - Asset inventory endpoints for listing, creating, editing, assignment, returns, and assignment history.
 - Request creation and status tracking, including automatic draft procurement creation when an asset is unavailable.
@@ -19,7 +19,7 @@ Nexus is a role-aware operations API for organizations coordinating inventory, f
 
 List endpoints return empty JSON collections when there are no matching records. Protected routes return `401` when authentication is missing and `403` when the signed-in role is not allowed. Other common responses include `400` for invalid input, `404` for missing or inaccessible records, `409` for conflicts, and `503` when the database is unavailable.
 
-Two-factor authentication is required for every account. `POST /session/login` begins a challenge after password validation. First-time enrollment returns a TOTP setup key; add it manually to an authenticator app and submit its six-digit code to `POST /session/2fa/verify` as `{"code":"123456"}`. Enrollment returns one-time recovery codes; save them because they are shown only once. Challenges expire after ten minutes, and repeated incorrect codes are temporarily locked. TOTP secrets are encrypted at rest using a key derived from `SECRET_KEY`; keep that key stable and backed up, since changing it makes existing authenticator secrets unreadable. Serve the login and enrollment flow over HTTPS outside local development.
+After password validation, `POST /session/login` starts a sign-in challenge and returns a six-digit code rendered as a plain QR in the login page. Scan it with a camera or QR scanner and enter the displayed code; it expires after five minutes and works once. This code is not device-bound and does not verify the scanner's identity: anyone who can see or scan it can use it for that sign-in. The QR code is the default convenience flow, not an independent authentication factor. Users can instead use an enrolled authenticator app (TOTP) as a backup via `POST /session/2fa/verify` with `{"method":"totp","code":"123456"}`. For accounts without an enrolled authenticator, `POST /session/2fa/totp/setup` returns a separate authenticator-compatible provisioning QR and manual setup key. One-time recovery codes are provided during enrollment. Treat TOTP provisioning QR codes and setup keys as secrets: anyone who obtains them can generate verification codes. TOTP secrets are encrypted at rest using a key derived from `SECRET_KEY`; keep that key stable and backed up, since changing it makes existing authenticator secrets unreadable. Serve the login and enrollment flow over HTTPS outside local development.
 
 ## API routes
 
@@ -30,7 +30,8 @@ The disbursement blueprint uses the `/api` prefix. Other routes do not. Route-le
 | GET | `/` | API status |
 | GET | `/health` | Health check |
 | POST | `/session/login` | Start a session |
-| POST | `/session/2fa/verify` | Complete MFA enrollment or login with a TOTP/recovery code |
+| POST | `/session/2fa/totp/setup` | Start authenticator-app enrollment |
+| POST | `/session/2fa/verify` | Complete sign-in with a QR code, TOTP, or a recovery code |
 | POST | `/session/logout` | End a session |
 | GET | `/users/accounts` | List accounts (admin) |
 | GET | `/users/accounts/<int:user_id>` | Get an account (admin) |
@@ -109,7 +110,8 @@ The B2C client uses only `https://sandbox.safaricom.co.ke`. Sandbox test values 
 | Method and path | Body keys |
 |---|---|
 | `POST /session/login` | `identifier` or `username` or `email`, and `password` (required; JSON or form data) |
-| `POST /session/2fa/verify` | `code` (required: six-digit TOTP or one-time recovery code) |
+| `POST /session/2fa/totp/setup` | No body; requires a pending login challenge |
+| `POST /session/2fa/verify` | `code` and optional `method` (`qr`, `totp`, or `recovery`); omitted method defaults to TOTP |
 | `POST /users/accounts` | `username`, `email`, `password`, `role` (all required) |
 | `PATCH /users/accounts/<int:user_id>` | `username`, `email`, `password`, `role`, `is_active` (at least one required) |
 | `POST /approvals/<int:approval_id>/decision` | `decision` (required: `approved` or `rejected`), `comments` |
