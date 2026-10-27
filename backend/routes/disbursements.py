@@ -1,3 +1,5 @@
+import hashlib
+import json
 import uuid
 import hmac
 import os
@@ -153,8 +155,82 @@ def create_disbursement():
     if amount > MAX_B2C_AMOUNT:
         return jsonify(error="Sandbox payout amount cannot exceed KES 70,000."), 422
 
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+        if (
+            not idempotency_key
+            or len(idempotency_key) > 128
+            or not idempotency_key.isascii()
+            or any(
+                ord(character) < 33 or ord(character) > 126
+                for character in idempotency_key
+            )
+        ):
+            return jsonify(
+                error="Idempotency-Key must be 1 to 128 printable ASCII characters without spaces."
+            ), 422
+
+    payload_hash = hashlib.sha256(
+        json.dumps(
+            {
+                "payee": payee.strip(),
+                "recipient_phone": phone,
+                "amount": format(amount, ".2f"),
+                "currency": "KES",
+                "description": description.strip(),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    key_hash = (
+        hashlib.sha256(idempotency_key.encode("ascii")).hexdigest()
+        if idempotency_key is not None
+        else None
+    )
     reference = "NEX-" + uuid.uuid4().hex[:10].upper()
     with connect_database() as connection:
+        if key_hash is not None:
+            reservation = connection.execute(
+                '''INSERT INTO "Disbursement_Idempotency"
+                       (user_id, idempotency_key_hash, payload_hash)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (user_id, idempotency_key_hash) DO NOTHING
+                   RETURNING user_id''',
+                (session["user_id"], key_hash, payload_hash),
+            ).fetchone()
+            if reservation is None:
+                existing = connection.execute(
+                    '''SELECT payload_hash, disbursement_id
+                       FROM "Disbursement_Idempotency"
+                       WHERE user_id = %s AND idempotency_key_hash = %s
+                       FOR UPDATE''',
+                    (session["user_id"], key_hash),
+                ).fetchone()
+                if existing is None:
+                    return jsonify(
+                        error="Could not resolve this idempotency key. Please retry."
+                    ), 503
+                if existing["payload_hash"] != payload_hash:
+                    return jsonify(
+                        error="This Idempotency-Key was already used with a different payout."
+                    ), 409
+                if existing["disbursement_id"] is None:
+                    return jsonify(
+                        error="A payout with this Idempotency-Key is still being created."
+                    ), 409
+                existing_row = connection.execute(
+                    '''SELECT * FROM "Disbursements"
+                       WHERE disbursement_id = %s''',
+                    (existing["disbursement_id"],),
+                ).fetchone()
+                if existing_row is None:
+                    return jsonify(
+                        error="The payout for this Idempotency-Key no longer exists."
+                    ), 409
+                return jsonify(_public_disbursement(existing_row)), 200
+
         row = connection.execute(
             '''INSERT INTO "Disbursements"
                    (reference, payee, recipient_phone, amount, currency,
@@ -163,6 +239,13 @@ def create_disbursement():
                RETURNING *''',
             (reference, payee.strip(), phone, amount, description.strip()),
         ).fetchone()
+        if key_hash is not None:
+            connection.execute(
+                '''UPDATE "Disbursement_Idempotency"
+                   SET disbursement_id = %s
+                   WHERE user_id = %s AND idempotency_key_hash = %s''',
+                (row["disbursement_id"], session["user_id"], key_hash),
+            )
         record_audit(
             row["disbursement_id"],
             "payout_created",
