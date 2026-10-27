@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -21,11 +21,27 @@ export default function LoginPage() {
   const [setup, setSetup] = useState(null);
   const [mfaOptions, setMfaOptions] = useState(null);
   const [mfaMethod, setMfaMethod] = useState("");
+  const [qrExpiresAt, setQrExpiresAt] = useState(null);
+  const [qrSecondsRemaining, setQrSecondsRemaining] = useState(0);
   const [code, setCode] = useState("");
   const [verifiedUser, setVerifiedUser] = useState(null);
   const [recoveryCodes, setRecoveryCodes] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (qrExpiresAt === null) return undefined;
+
+    const updateCountdown = () => {
+      setQrSecondsRemaining(
+        Math.max(0, Math.ceil((qrExpiresAt - Date.now()) / 1000))
+      );
+    };
+
+    updateCountdown();
+    const intervalId = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [qrExpiresAt]);
 
   if (user) {
     return <Navigate to="/dashboard" replace />;
@@ -46,6 +62,7 @@ export default function LoginPage() {
       setMfaOptions(response);
       setSetup(null);
       setMfaMethod("qr");
+      setQrExpiresAt(Date.now() + 5 * 60 * 1000);
       setCode("");
       setStep("mfa");
     } catch (submitError) {
@@ -101,54 +118,49 @@ export default function LoginPage() {
     setSetup(null);
     setMfaOptions(null);
     setMfaMethod("");
+    setQrExpiresAt(null);
+    setQrSecondsRemaining(0);
     setCode("");
     setError("");
     setStep("credentials");
   };
 
   return (
-    <div style={{
+    <div className="login-page" style={{
       minHeight: "100vh",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "linear-gradient(135deg, #0f172a, #111827)",
-      padding: "24px",
-      color: "#e5e7eb",
-      fontFamily: "Arial, sans-serif",
+      background: "var(--color-page)",
+      color: "var(--color-ink)",
+      fontFamily: "inherit",
     }}>
-      <div style={{
-        width: "100%",
-        maxWidth: "980px",
-        display: "grid",
-        gridTemplateColumns: "1.1fr 0.9fr",
-        gap: "24px",
-      }}>
+      <div className="login-panels">
         <section style={{
-          background: "rgba(15, 23, 42, 0.72)",
-          border: "1px solid rgba(148, 163, 184, 0.25)",
-          borderRadius: "18px",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "12px",
           padding: "32px",
-          boxShadow: "0 20px 40px rgba(15, 23, 42, 0.35)",
+          boxShadow: "0 8px 20px rgba(32, 52, 45, 0.05)",
         }}>
-          <p style={{ margin: "0 0 12px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#cbd5e1" }}>
+          <p style={{ margin: "0 0 12px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--color-primary)" }}>
             Nexus access portal
           </p>
           <h1 style={{ margin: "0 0 14px", fontSize: "2.2rem" }}>Sign in to continue</h1>
-          <p style={{ color: "#cbd5e1", marginTop: 0 }}>
+          <p style={{ color: "var(--color-muted)", marginTop: 0 }}>
             Secure operational access for finance, approvals, procurement, and admin workflows.
           </p>
 
           <div style={{ display: "grid", gap: "16px", marginTop: "28px" }}>
             {ROLE_DEFINITIONS.map((role) => (
               <div key={role.key} style={{
-                border: "1px solid rgba(148, 163, 184, 0.2)",
+                border: "1px solid var(--color-border)",
                 borderRadius: "12px",
-                background: "rgba(30, 41, 59, 0.8)",
+                background: "var(--color-surface-muted)",
                 padding: "12px 14px",
               }}>
                 <strong>{role.label}</strong>
-                <div style={{ color: "#cbd5e1", fontSize: "0.9rem", marginTop: "4px" }}>
+                <div style={{ color: "var(--color-muted)", fontSize: "0.9rem", marginTop: "4px" }}>
                   {role.description}
                 </div>
               </div>
@@ -157,11 +169,12 @@ export default function LoginPage() {
         </section>
 
         <section style={{
-          background: "rgba(255,255,255,0.96)",
-          borderRadius: "18px",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "12px",
           padding: "32px",
-          color: "#111827",
-          boxShadow: "0 20px 40px rgba(15, 23, 42, 0.35)",
+          color: "var(--color-ink)",
+          boxShadow: "0 8px 20px rgba(32, 52, 45, 0.05)",
         }}>
           <h2 style={{ marginTop: 0 }}>Welcome back</h2>
           {step === "credentials" && <form onSubmit={handleSubmit} style={{ display: "grid", gap: "16px" }}>
@@ -173,7 +186,7 @@ export default function LoginPage() {
                 value={form.email}
                 onChange={handleChange}
                 required
-                style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+                style={{ padding: "12px 14px", borderRadius: "8px", border: "1px solid var(--color-border)" }}
               />
             </label>
 
@@ -185,7 +198,7 @@ export default function LoginPage() {
                 value={form.password}
                 onChange={handleChange}
                 required
-                style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+                style={{ padding: "12px 14px", borderRadius: "8px", border: "1px solid var(--color-border)" }}
               />
             </label>
 
@@ -196,7 +209,7 @@ export default function LoginPage() {
             )}
 
             <button type="submit" disabled={submitting} style={{
-              background: "#2563eb",
+              background: "var(--color-primary)",
               color: "#fff",
               border: "none",
               borderRadius: "10px",
@@ -227,11 +240,16 @@ export default function LoginPage() {
               )}
               {mfaMethod === "qr" && (
                 <div style={{ marginBottom: "18px" }}>
-                  <p>Scan this QR code with your phone camera or any QR scanner, then enter the code it displays.</p>
+                  <p>Scan the QR code for your login code.</p>
+                  <p role="timer" aria-live="off">
+                    {qrSecondsRemaining > 0
+                      ? `Code expires in ${String(Math.floor(qrSecondsRemaining / 60)).padStart(2, "0")}:${String(qrSecondsRemaining % 60).padStart(2, "0")}`
+                      : "Code expired. Start over to get a new QR code."}
+                  </p>
                   <div style={{ display: "flex", justifyContent: "center", padding: "16px" }}>
                     <QRCodeSVG
                       value={mfaOptions.qr_code}
-                      size={220}
+                      size={120}
                       level="M"
                       title="One-time sign-in code"
                     />
@@ -245,7 +263,7 @@ export default function LoginPage() {
                   <div style={{ display: "flex", justifyContent: "center", padding: "16px" }}>
                     <QRCodeSVG
                       value={setup.otpauth_url}
-                      size={220}
+                      size={120}
                       level="M"
                       title="Authenticator app setup QR code"
                     />
@@ -254,7 +272,7 @@ export default function LoginPage() {
                   <p><strong>Account:</strong> {form.email}</p>
                   <p><strong>Issuer:</strong> {setup.issuer}</p>
                   <p><strong>Setup key:</strong></p>
-                  <code style={{ display: "block", overflowWrap: "anywhere", padding: "12px", background: "#f1f5f9", borderRadius: "8px" }}>
+                  <code style={{ display: "block", overflowWrap: "anywhere", padding: "12px", background: "var(--color-surface-muted)", borderRadius: "8px" }}>
                     {setup.secret}
                   </code>
                   <p>Enter the six-digit code from the app to finish setup. Save the recovery codes shown after verification.</p>
@@ -285,12 +303,12 @@ export default function LoginPage() {
                     required
                     maxLength={64}
                     autoFocus
-                    style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+                    style={{ padding: "12px 14px", borderRadius: "8px", border: "1px solid var(--color-border)" }}
                   />
                 </label>
                 {error && <div role="alert" style={{ background: "#fef2f2", color: "#b91c1c", borderRadius: "10px", padding: "10px 12px" }}>{error}</div>}
                 <button type="submit" disabled={submitting} style={{
-                  background: "#2563eb",
+                  background: "var(--color-primary)",
                   color: "#fff",
                   border: "none",
                   borderRadius: "10px",
@@ -335,7 +353,7 @@ export default function LoginPage() {
                 {recoveryCodes.map((recoveryCode) => <li key={recoveryCode}>{recoveryCode}</li>)}
               </ul>
               <button type="button" onClick={handleRecoverySaved} style={{
-                background: "#2563eb",
+                background: "var(--color-primary)",
                 color: "#fff",
                 border: "none",
                 borderRadius: "10px",

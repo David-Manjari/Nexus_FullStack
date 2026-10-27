@@ -5,26 +5,26 @@
   gap: 0.5rem;
   padding: 2rem 1rem;
   text-align: center;
-  color: #444;
+  color: var(--color-muted);
 }
 .state-box h3 { margin: 0; font-size: 1.1rem; }
 .state-box p { margin: 0; max-width: 40ch; }
-.state-error { color: #a12626; background: #fdf0f0; border-radius: 6px; }
+.state-error { color: #a12626; background: #fdf0f0; border-radius: 10px; }
 .state-button {
   margin-top: 0.5rem;
   padding: 0.5rem 1rem;
   border: 1px solid currentColor;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
-.state-button:focus-visible { outline: 2px solid #1a5fb4; outline-offset: 2px; }
+.state-button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .state-spinner {
   width: 1.5rem;
   height: 1.5rem;
-  border: 3px solid #ccc;
-  border-top-color: #1a5fb4;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: state-spin 0.8s linear infinite;
 }
