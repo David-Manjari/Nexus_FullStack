@@ -105,6 +105,8 @@ Configure the same callback base URL and token in the Daraja request callback UR
 
 Payout creation accepts Kenyan mobile numbers and whole KES amounts from 1 through 70,000. An admin/manager must approve the payout; the requester cannot approve their own payout. The same approver may submit the approved payout to Daraja. Submission moves the item to `processing`; only a correlated Daraja callback with a matching amount and transaction receipt marks it paid. A timeout or ambiguous network response remains `processing` and must be reconciled before anyone retries. Do not assume a successful submission response means the payout completed. The callback token is an additional shared-secret guard, not a Daraja callback signature; callback transaction IDs and amount are also checked.
 
+Payout creation optionally accepts an `Idempotency-Key` header (1-128 printable ASCII characters without spaces), scoped to the requesting user. Retrying with the same key and identical normalized payout details returns the original payout instead of creating a duplicate; reusing the key with different details returns `409 Conflict`. Keys are stored as hashes.
+
 The B2C client uses only `https://sandbox.safaricom.co.ke`. Sandbox test values and behavior are controlled by Safaricom and may differ from production. No live-money credentials or production endpoint should be added to this integration.
 
 | Method and path | Body keys |

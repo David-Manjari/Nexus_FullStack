@@ -92,34 +92,22 @@ function DashboardHome() {
 
   return (
     <div style={{ display: "grid", gap: "16px" }}>
-      <p style={{ margin: 0, color: "#475569", fontSize: "1.4rem", fontWeight: 600 }}>
+      <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "1.1rem", fontWeight: 600 }}>
         Welcome back,
       </p>
       <h1 style={{ margin: 0 }}>Operations dashboard</h1>
       <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginTop: "4px" }}>
         <span
           style={{
-            background: "#eff6ff",
-            color: "#1d4ed8",
-            padding: "18px 24px",
-            borderRadius: "999px",
-            fontSize: "1.5rem",
+            background: "var(--color-primary-soft)",
+            color: "var(--color-primary)",
+            padding: "12px 18px",
+            borderRadius: "12px",
+            fontSize: "1rem",
             fontWeight: 700,
           }}
         >
           Role: {user?.role}
-        </span>
-        <span
-          style={{
-            background: "#f1f5f9",
-            color: "#334155",
-            padding: "18px 24px",
-            borderRadius: "999px",
-            fontSize: "1.5rem",
-            fontWeight: 700,
-          }}
-        >
-          Department: {user?.department || "Not set"}
         </span>
       </div>
 
@@ -129,15 +117,15 @@ function DashboardHome() {
           display: "block",
           width: "100%",
           maxWidth: "320px",
-          background: "#fee2e2",
-          color: "#991b1b",
+          background: "var(--color-primary-soft)",
+          color: "var(--color-primary)",
           padding: "12px 16px",
-          borderRadius: 0,
-          fontSize: "1.1rem",
+          borderRadius: "8px",
+          fontSize: "1rem",
           fontWeight: 700,
           textDecoration: "none",
           boxSizing: "border-box",
-          border: "1px solid #fca5a5",
+          border: "1px solid var(--color-border)",
           cursor: "pointer",
           lineHeight: 1.4,
         }}

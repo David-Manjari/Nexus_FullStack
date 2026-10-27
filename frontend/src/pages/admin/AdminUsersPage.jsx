@@ -153,15 +153,15 @@ export default function AdminUsersPage() {
 
       <div style={{ display: "grid", gap: "12px", marginTop: "20px" }}>
         {!loading && !error && users.map((member) => (
-          <div key={member.id} style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", background: "#fff" }}>
+          <div key={member.id} style={{ border: "1px solid var(--color-border)", borderRadius: "12px", padding: "16px", background: "var(--color-surface)", boxShadow: "0 6px 16px rgba(32, 52, 45, 0.04)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
               <div>
                 <strong>{member.name}</strong>
-                <div style={{ color: "#475569" }}>{member.email}</div>
+                <div style={{ color: "var(--color-muted)" }}>{member.email}</div>
               </div>
               <span style={{
-                background: member.id === user.id ? "#dbeafe" : "#e2e8f0",
-                color: member.id === user.id ? "#1d4ed8" : "#334155",
+                background: member.id === user.id ? "var(--color-primary-soft)" : "var(--color-surface-muted)",
+                color: member.id === user.id ? "var(--color-primary)" : "var(--color-ink)",
                 padding: "6px 10px",
                 borderRadius: "999px",
                 fontSize: "0.8rem",
@@ -172,10 +172,10 @@ export default function AdminUsersPage() {
             </div>
 
             <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              <span style={{ background: "#eef2ff", color: "#4338ca", padding: "6px 10px", borderRadius: "999px" }}>
+              <span style={{ background: "var(--color-primary-soft)", color: "var(--color-primary)", padding: "6px 10px", borderRadius: "999px" }}>
                 {getRoleLabel(member.role)}
               </span>
-              <span style={{ background: "#f1f5f9", color: "#334155", padding: "6px 10px", borderRadius: "999px" }}>
+              <span style={{ background: "var(--color-surface-muted)", color: "var(--color-ink)", padding: "6px 10px", borderRadius: "999px" }}>
                 {member.id === user.id ? "Signed-in user" : "Account"}
               </span>
             </div>
@@ -241,7 +241,7 @@ export default function AdminUsersPage() {
                   </select>
                 </label>
                 {member.role === "admin" && (
-                  <p style={{ margin: "-6px 0 0", color: "#475569" }}>
+                  <p style={{ margin: "-6px 0 0", color: "var(--color-muted)" }}>
                     Admin account roles cannot be changed.
                   </p>
                 )}

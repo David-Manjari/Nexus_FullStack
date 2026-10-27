@@ -47,11 +47,15 @@ export default function ItemFormModal({ type, item, existingItems, onClose, onSa
       category: values.category.trim(),
       brand: values.brand.trim(),
       sku: values.sku.trim(),
-      plateNo: values.plateNo.trim(),
-      make: values.make.trim(),
-      model: values.model.trim(),
-      mileage: Number(values.mileage),
     };
+    if (type === "vehicle") {
+      Object.assign(data, {
+        plateNo: values.plateNo.trim(),
+        make: values.make.trim(),
+        model: values.model.trim(),
+        mileage: Number(values.mileage),
+      });
+    }
     if (item?.status !== "assigned") data.status = values.status;
 
     try {

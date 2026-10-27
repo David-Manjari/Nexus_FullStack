@@ -1,8 +1,7 @@
 """Safaricom Daraja B2C sandbox client."""
 
+import logging
 import os
-import threading
-import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -12,6 +11,7 @@ SANDBOX_BASE_URL = "https://sandbox.safaricom.co.ke"
 OAUTH_URL = f"{SANDBOX_BASE_URL}/oauth/v1/generate"
 B2C_URL = f"{SANDBOX_BASE_URL}/mpesa/b2c/v1/paymentrequest"
 COMMAND_IDS = {"BusinessPayment", "SalaryPayment", "PromotionPayment"}
+logger = logging.getLogger(__name__)
 
 
 class DarajaConfigurationError(RuntimeError):
@@ -114,65 +114,35 @@ class DarajaConfig:
         )
 
 
-_token_lock = threading.Lock()
-_cached_token = None
-_token_expires_at = 0.0
-_cached_credentials = None
-
-
 def get_access_token(config):
-    global _cached_token, _token_expires_at, _cached_credentials
-    credentials = (config.consumer_key, config.consumer_secret)
-    now = time.monotonic()
-    if (
-        _cached_token
-        and _cached_credentials == credentials
-        and now < _token_expires_at
-    ):
-        return _cached_token
+    try:
+        response = requests.get(
+            OAUTH_URL,
+            params={"grant_type": "client_credentials"},
+            auth=(config.consumer_key, config.consumer_secret),
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as error:
+        raise DarajaConfigurationError(
+            "Could not authenticate with the Daraja sandbox."
+        ) from error
 
-    with _token_lock:
-        now = time.monotonic()
-        if (
-            _cached_token
-            and _cached_credentials == credentials
-            and now < _token_expires_at
-        ):
-            return _cached_token
-        try:
-            response = requests.get(
-                OAUTH_URL,
-                params={"grant_type": "client_credentials"},
-                auth=(config.consumer_key, config.consumer_secret),
-                timeout=10,
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except (requests.RequestException, ValueError) as error:
-            raise DarajaConfigurationError(
-                "Could not authenticate with the Daraja sandbox."
-            ) from error
-
-        if not isinstance(payload, dict):
-            raise DarajaConfigurationError(
-                "Daraja sandbox returned an invalid authentication response."
-            )
-        token = payload.get("access_token")
-        if not isinstance(token, str) or not token:
-            raise DarajaConfigurationError(
-                "Daraja sandbox did not return an access token."
-            )
-        try:
-            expires_in = max(int(payload.get("expires_in", 3600)), 60)
-        except (TypeError, ValueError):
-            expires_in = 3600
-        _cached_token = token
-        _cached_credentials = credentials
-        _token_expires_at = time.monotonic() + expires_in - 30
-        return token
+    if not isinstance(payload, dict):
+        raise DarajaConfigurationError(
+            "Daraja sandbox returned an invalid authentication response."
+        )
+    token = payload.get("access_token")
+    if not isinstance(token, str) or not token:
+        raise DarajaConfigurationError(
+            "Daraja sandbox did not return an access token."
+        )
+    return token
 
 
 def submit_b2c(config, access_token, *, amount, phone_number, reference, occasion):
+    print(repr(payload["ResultURL"]), repr(payload["QueueTimeOutURL"]))
     payload = {
         "InitiatorName": config.initiator_name,
         "SecurityCredential": config.security_credential,
@@ -198,10 +168,36 @@ def submit_b2c(config, access_token, *, amount, phone_number, reference, occasio
         ) from error
 
     if 400 <= response.status_code < 500:
-        raise DarajaRejected(
-            f"Daraja sandbox rejected the payout (HTTP {response.status_code})."
+        try:
+            error_payload = response.json()
+        except ValueError:
+            error_payload = {}
+        details = []
+        if isinstance(error_payload, dict):
+            for key in (
+                "errorCode",
+                "errorMessage",
+                "ResponseCode",
+                "ResponseDescription",
+            ):
+                value = error_payload.get(key)
+                if isinstance(value, (str, int)) and not isinstance(value, bool):
+                    text = " ".join(str(value).split())
+                    if text:
+                        details.append(text[:200])
+        reason = " - ".join(details) or "No error details were returned."
+        message = (
+            f"Daraja sandbox rejected the payout (HTTP {response.status_code}): "
+            f"{reason}"
         )
+        logger.warning("Daraja B2C rejection for %s: %s", reference, message)
+        raise DarajaRejected(message[:500])
     if response.status_code >= 500:
+        logger.error(
+            "Daraja B2C returned HTTP %s for %s; submission outcome is uncertain.",
+            response.status_code,
+            reference,
+        )
         raise DarajaSubmissionUncertain(
             "Daraja sandbox returned a server error after the payout was submitted."
         )
@@ -217,19 +213,28 @@ def submit_b2c(config, access_token, *, amount, phone_number, reference, occasio
         )
 
     response_code = result.get("ResponseCode")
-    if response_code is not None and str(response_code) != "0":
+    if response_code is None:
+        raise DarajaSubmissionUncertain(
+            "Daraja returned no response code for the payout. Reconcile before retrying."
+        )
+    if isinstance(response_code, bool) or str(response_code) != "0":
         description = result.get("ResponseDescription") or "Submission was rejected."
         raise DarajaRejected(str(description)[:300])
 
     conversation_id = result.get("ConversationID")
     originator_conversation_id = result.get("OriginatorConversationID")
-    if not conversation_id or not originator_conversation_id:
+    if (
+        not isinstance(conversation_id, str)
+        or not conversation_id.strip()
+        or not isinstance(originator_conversation_id, str)
+        or not originator_conversation_id.strip()
+    ):
         raise DarajaSubmissionUncertain(
             "Daraja accepted or may have accepted the payout, but returned no "
             "correlation identifiers. Reconcile before retrying."
         )
     return {
-        "conversation_id": str(conversation_id),
-        "originator_conversation_id": str(originator_conversation_id),
+        "conversation_id": conversation_id.strip(),
+        "originator_conversation_id": originator_conversation_id.strip(),
         "message": str(result.get("ResponseDescription") or "Payout submitted."),
     }

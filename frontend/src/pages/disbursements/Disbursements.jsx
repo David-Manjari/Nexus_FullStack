@@ -11,6 +11,7 @@ function Disbursements() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState({
     payee: "",
     recipientPhone: "",
@@ -84,6 +85,7 @@ function Disbursements() {
         currency: "KES",
         description: "",
       });
+      setFormOpen(false);
       await load();
     } catch (createError) {
       setError(createError.message || "Could not create disbursement.");
@@ -153,15 +155,26 @@ function Disbursements() {
       <header className="disbursements-header">
         <h1>Disbursements</h1>
         <p>Sandbox only: no production payouts are sent.</p>
+        <button
+          className="disbursement-form-toggle"
+          type="button"
+          aria-expanded={formOpen}
+          aria-controls="disbursement-form"
+          onClick={() => setFormOpen((open) => !open)}
+        >
+          {formOpen ? "Cancel new disbursement" : "Create disbursement"}
+        </button>
       </header>
 
-      <form onSubmit={handleCreate} style={{ display: "grid", gap: 12, maxWidth: 560, marginBottom: 24 }}>
-        <label>Payee<input required value={form.payee} onChange={(event) => setForm({ ...form, payee: event.target.value })} /></label>
-        <label>Safaricom mobile number<input required type="tel" placeholder="07XXXXXXXX" value={form.recipientPhone} onChange={(event) => setForm({ ...form, recipientPhone: event.target.value })} /></label>
-        <label>Amount (KES)<input required type="number" min="1" max="70000" step="1" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
-        <label>Description<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-        <button type="submit" disabled={creating}>{creating ? "Creating..." : "Create disbursement"}</button>
-      </form>
+      {formOpen && (
+        <form id="disbursement-form" className="disbursement-form" onSubmit={handleCreate}>
+          <label>Payee<input required value={form.payee} onChange={(event) => setForm({ ...form, payee: event.target.value })} /></label>
+          <label>Safaricom mobile number<input required type="tel" placeholder="07XXXXXXXX" value={form.recipientPhone} onChange={(event) => setForm({ ...form, recipientPhone: event.target.value })} /></label>
+          <label>Amount (KES)<input required type="number" min="1" max="70000" step="1" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
+          <label>Description<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+          <button type="submit" disabled={creating}>{creating ? "Creating..." : "Save disbursement"}</button>
+        </form>
+      )}
 
       <section className="payout-queue">
         <h2>Payout Queue</h2>

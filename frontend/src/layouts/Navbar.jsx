@@ -41,10 +41,10 @@ export default function Navbar({ currentPage }) {
                 </nav>
 
                 {user && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div className="header-account">
                         <NotificationBell />
-                        <span style={{ color: '#cbd5e1' }}>{user.name}</span>
-                        <button type="button" onClick={handleLogout} style={{ padding: '8px 12px', borderRadius: '8px' }}>
+                        <span className="header-account-name">{user.name}</span>
+                        <button className="button-secondary" type="button" onClick={handleLogout}>
                             Logout
                         </button>
                     </div>

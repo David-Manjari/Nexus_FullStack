@@ -223,6 +223,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS disbursements_daraja_transaction_idx
     ON "Disbursements"(daraja_transaction_id)
     WHERE daraja_transaction_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS "Disbursement_Idempotency" (
+    user_id              INTEGER NOT NULL REFERENCES "Users"(user_id) ON DELETE CASCADE,
+    idempotency_key_hash CHAR(64) NOT NULL,
+    payload_hash         CHAR(64) NOT NULL,
+    disbursement_id      INTEGER REFERENCES "Disbursements"(disbursement_id) ON DELETE CASCADE,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, idempotency_key_hash)
+);
+
 CREATE TABLE IF NOT EXISTS "Payment_History" (
     history_id         SERIAL PRIMARY KEY,
     disbursement_id    INTEGER NOT NULL REFERENCES "Disbursements"(disbursement_id) ON DELETE CASCADE,
