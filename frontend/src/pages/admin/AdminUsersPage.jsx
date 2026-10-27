@@ -5,6 +5,7 @@ import { getRoleLabel, ROLE_DEFINITIONS } from "../../roles";
 import Loading from "../../components/Loading";
 import ErrorMessage from "../../components/ErrorMessage";
 import EmptyState from "../../components/EmptyState";
+import "./AdminUsersPage.css";
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
@@ -13,6 +14,7 @@ export default function AdminUsersPage() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ username: "", email: "", password: "", role: "staff" });
+  const [createFormOpen, setCreateFormOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editForm, setEditForm] = useState({ username: "", email: "", password: "", role: "staff" });
   const [editError, setEditError] = useState("");
@@ -42,6 +44,7 @@ export default function AdminUsersPage() {
       // Account creation now uses the backend's validated role and password rules.
       await createUser(form);
       setForm({ username: "", email: "", password: "", role: "staff" });
+      setCreateFormOpen(false);
       await loadUsers();
     } catch (createError) {
       setError(createError.message || "Could not create account.");
@@ -102,12 +105,24 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div>
-      <h1>Users</h1>
-      <p>Manage user access and review current identities in the workspace.</p>
+    <div className="admin-users-page">
+      <header className="admin-users-header">
+        <div>
+          <h1>Users</h1>
+          <p>Manage user access and review current identities in the workspace.</p>
+        </div>
+        <button
+          type="button"
+          aria-expanded={createFormOpen}
+          aria-controls="create-account-form"
+          onClick={() => setCreateFormOpen((open) => !open)}
+        >
+          {createFormOpen ? "Cancel" : "Create account"}
+        </button>
+      </header>
 
       {error && <ErrorMessage message={error} onRetry={loadUsers} />}
-      <form onSubmit={handleCreate} style={{ display: "grid", gap: 12, maxWidth: 560, margin: "20px 0" }}>
+      {createFormOpen && <form id="create-account-form" className="admin-users-form" onSubmit={handleCreate}>
         <label>Username<input required minLength={3} maxLength={64} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
         <label>Email<input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
         <label>
@@ -128,7 +143,7 @@ export default function AdminUsersPage() {
           {ROLE_DEFINITIONS.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}
         </select></label>
         <button type="submit" disabled={saving}>{saving ? "Creating..." : "Create account"}</button>
-      </form>
+      </form>}
 
       {loading && <Loading message="Loading users..." />}
       {!loading && !error && users.length === 0 && (

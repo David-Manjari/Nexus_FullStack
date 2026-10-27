@@ -1,0 +1,43 @@
+.admin-users-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.admin-users-header h1,
+.admin-users-header p {
+  margin-top: 0;
+}
+
+.admin-users-header p {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.admin-users-form {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+  margin: 20px 0;
+}
+
+.admin-users-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-users-form > button {
+  justify-self: end;
+}
+
+@media (max-width: 520px) {
+  .admin-users-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-users-header > button {
+    align-self: flex-end;
+  }
+}
