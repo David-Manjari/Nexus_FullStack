@@ -136,7 +136,7 @@ function Disbursements() {
         <div className="payout-actions">
           {payout.status === "Pending" && (
             <button type="button" disabled={busyId === payout.id} onClick={() => runPayment(payout.id)}>
-              {busyId === payout.id ? "Submitting..." : "Send via Daraja sandbox"}
+              {busyId === payout.id ? "Submitting..." : "Pay"}
             </button>
           )}
 
