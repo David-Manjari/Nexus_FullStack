@@ -11,6 +11,7 @@ function mapDisbursement(item) {
     reference: item.reference,
     amount: `${item.currency} ${Number(item.amount).toLocaleString()}`,
     date: item.created_at,
+    updatedAt: item.updated_at || item.created_at,
     status,
     approvalStatus: item.approval_status,
     approvalReason: item.approval_reason,
