@@ -85,6 +85,7 @@
 .payout-status-filter {
   display: inline-flex;
   align-items: center;
+  flex-direction: row-reverse;
   gap: 8px;
   color: var(--color-muted);
   font-weight: 600;
