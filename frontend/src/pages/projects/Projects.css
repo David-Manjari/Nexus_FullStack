@@ -349,8 +349,7 @@
 
 .dashboard-projects__header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: 16px;
 }
 
@@ -358,11 +357,21 @@
   font-size: 1.25rem;
 }
 
+.dashboard-projects__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .dashboard-projects__filter {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 600;
+  margin-right: 8px;
 }
 
 .dashboard-projects__filter select {
@@ -423,6 +432,17 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+@media (max-width: 800px) {
+  .dashboard-projects__header {
+    flex-direction: column;
+  }
+
+  .dashboard-projects__controls {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
 }
 
 .dashboard-projects__audit {
