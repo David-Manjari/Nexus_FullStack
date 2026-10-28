@@ -13,6 +13,9 @@ function mapProcurement(item) {
     status: item.status,
     createdBy: item.raised_by_name,
     createdAt: item.created_at,
+    disbursementId: item.disbursement_id,
+    disbursementStatus: item.disbursement_status,
+    disbursementApprovalStatus: item.disbursement_approval_status,
     history: (item.history ?? []).map((entry) => ({
       status: entry.status,
       note: entry.note,
@@ -66,6 +69,14 @@ export async function escalateProcurement(id) {
     body: { action: "submit" },
   });
   return mapProcurement(procurement);
+}
+
+export async function createProcurementDisbursement(id, recipientPhone) {
+  const { disbursement } = await apiRequest(`/procurements/${id}/disbursement`, {
+    method: "POST",
+    body: { recipient_phone: recipientPhone },
+  });
+  return disbursement;
 }
 
 export async function getProcurementsAwaitingApproval() {

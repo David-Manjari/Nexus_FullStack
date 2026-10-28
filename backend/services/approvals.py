@@ -125,6 +125,9 @@ def decide(connection, approval_id, user_id, role, decision, reason=None):
 
 def _after_decision(connection, approval):
     """Notify the requester when an approval is approved or rejected."""
+    if approval["request_type"] == "equipment_procurement":
+        _update_procurement_status(connection, approval)
+
     request_type = approval["request_type"].replace("_", " ")
     reference_id = approval["reference_id"]
     reference = f" #{reference_id}" if reference_id is not None else ""
@@ -137,6 +140,44 @@ def _after_decision(connection, approval):
         approval["requested_by"],
         message,
         "approval_decision",
+    )
+
+
+def _update_procurement_status(connection, approval):
+    from .request_workflow import log_action, record_event
+
+    procurement_id = approval["reference_id"]
+    procurement = connection.execute(
+        '''SELECT status FROM "Procurements"
+           WHERE procurement_id = %s
+           FOR UPDATE''',
+        (procurement_id,),
+    ).fetchone()
+    if procurement is None:
+        raise LookupError("Procurement not found.")
+    if procurement["status"] != "pending_approval":
+        raise AlreadyDecided("This procurement is no longer awaiting approval.")
+
+    status = approval["status"]
+    connection.execute(
+        '''UPDATE "Procurements"
+           SET status = %s, updated_at = NOW()
+           WHERE procurement_id = %s''',
+        (status, procurement_id),
+    )
+    note = (
+        "Procurement approved. Create a disbursement request when ready."
+        if status == "approved"
+        else f"Procurement rejected. {approval['decision_reason']}"
+    )
+    record_event(
+        connection, "procurement", procurement_id, status, note,
+        approval["decided_by"],
+    )
+    log_action(
+        connection, approval["decided_by"], f"procurement_{status}",
+        "procurement", procurement_id,
+        {"approval_id": approval["approval_id"], "reason": approval["decision_reason"]},
     )
 
 
