@@ -62,6 +62,7 @@ function DashboardHome() {
   const [procurements, setProcurements] = useState([]);
   const [procurementsLoading, setProcurementsLoading] = useState(true);
   const [procurementsError, setProcurementsError] = useState("");
+  const [activityCategory, setActivityCategory] = useState("all");
   const isStaff = user?.role === "staff";
   const canViewProcurements = ["admin", "manager"].includes(user?.role);
 
@@ -178,6 +179,63 @@ function DashboardHome() {
     };
   }, [canViewProcurements, user?.id]);
 
+  const activityItems = [
+    ...projects.map((project) => ({
+      id: `project-${project.id}`,
+      category: "projects",
+      label: "Project",
+      title: project.name,
+      status: project.status.replaceAll("_", " "),
+      summary: project.description,
+      date: project.createdAt,
+    })),
+    ...disbursements.map((disbursement) => ({
+      id: `disbursement-${disbursement.id}`,
+      category: "disbursements",
+      label: "Disbursement",
+      title: disbursement.recipient,
+      status: disbursement.approvalStatus || disbursement.status,
+      summary: `${disbursement.reference} · ${disbursement.amount}`,
+      date: disbursement.date,
+    })),
+    ...requests.map((request) => ({
+      id: `request-${request.id}`,
+      category: "requests",
+      label: "Request",
+      title: request.itemName,
+      status: request.status,
+      summary: request.reason,
+      date: request.createdAt,
+    })),
+    ...(canViewProcurements
+      ? procurements.map((procurement) => ({
+        id: `procurement-${procurement.id}`,
+        category: "procurement",
+        label: "Procurement",
+        title: procurement.itemName,
+        status: procurement.status.replaceAll("_", " "),
+        summary: `${procurement.quantity} × ${procurement.itemType}${
+          procurement.estimatedCost != null
+            ? ` · KES ${Number(procurement.estimatedCost).toLocaleString()}`
+            : ""
+        }`,
+        date: procurement.createdAt,
+      }))
+      : []),
+  ].sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
+  const visibleActivity = activityItems
+    .filter((item) => activityCategory === "all" || item.category === activityCategory)
+    .slice(0, 4);
+  const activityLoading =
+    projectsLoading || disbursementsLoading || requestsLoading ||
+    (canViewProcurements && procurementsLoading);
+  const activityErrors = [
+    projectsError,
+    disbursementsError,
+    requestsError,
+    canViewProcurements ? procurementsError : "",
+  ].filter(Boolean);
+
   return (
     <div style={{ display: "grid", gap: "16px" }}>
       <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "1.1rem", fontWeight: 600 }}>
@@ -221,143 +279,60 @@ function DashboardHome() {
         {unreadCount > 0 ? "Click here to view unread notifications" : "Click here to view notifications"}
       </Link>
 
-      <section className="dashboard-projects" aria-labelledby="dashboard-projects-heading">
+      <section className="dashboard-projects" aria-labelledby="dashboard-activity-heading">
         <div className="dashboard-projects__header">
-          <h2 id="dashboard-projects-heading">
-            {isStaff ? "Projects you are assigned to" : "Project status and audit"}
-          </h2>
-          <Link className="dashboard-projects__view-all" to="/projects">View all</Link>
+          <h2 id="dashboard-activity-heading">Recent activity</h2>
+          <label className="dashboard-projects__filter">
+            Category
+            <select
+              value={activityCategory}
+              onChange={(event) => setActivityCategory(event.target.value)}
+            >
+              <option value="all">All categories</option>
+              <option value="projects">Projects</option>
+              <option value="disbursements">Disbursements</option>
+              <option value="requests">Requests</option>
+              {canViewProcurements && <option value="procurement">Procurements</option>}
+            </select>
+          </label>
         </div>
-        {projectsLoading && <Loading message="Loading project status..." />}
-        {!projectsLoading && projectsError && <p role="alert">{projectsError}</p>}
-        {!projectsLoading && !projectsError && projects.length === 0 && (
-          <p>{isStaff ? "You are not assigned to any projects." : "No projects are available to you."}</p>
+        {activityLoading && <Loading message="Loading recent activity..." />}
+        {!activityLoading && activityErrors.map((message) => (
+          <p key={message} role="alert">{message}</p>
+        ))}
+        {!activityLoading && visibleActivity.length === 0 && (
+          <p>
+            {activityItems.length === 0
+              ? "No recent activity found."
+              : "No recent activity in this category."}
+          </p>
         )}
-        {!projectsLoading && !projectsError && projects.length > 0 && (
+        {!activityLoading && visibleActivity.length > 0 && (
           <ul className="dashboard-projects__list">
-            {projects.slice(0, 4).map((project) => (
-              <li key={project.id} className="dashboard-projects__item">
+            {visibleActivity.map((item) => (
+              <li key={item.id} className="dashboard-projects__item">
                 <div className="dashboard-projects__title">
-                  <strong>{project.name}</strong>
-                  <span className={`project-status project-status--${project.status}`}>
-                    {project.status.replaceAll("_", " ")}
-                  </span>
+                  <div className="dashboard-projects__activity-heading">
+                    <span className="dashboard-projects__category">{item.label}</span>
+                    <strong>{item.title}</strong>
+                  </div>
+                  <span className="project-status">{item.status}</span>
                 </div>
-                {project.statusAudit.length > 0 ? (
-                  <ol className="dashboard-projects__audit">
-                    {project.statusAudit.map((entry) => (
-                      <li key={entry.id}>
-                        <span>
-                          {entry.fromStatus ? `${entry.fromStatus.replaceAll("_", " ")} to ` : "Created as "}
-                          {entry.toStatus.replaceAll("_", " ")}
-                        </span>
-                        {entry.reason && <span> · {entry.reason}</span>}
-                        <small>
-                          {entry.changedByName ? ` by ${entry.changedByName}` : ""}
-                          {entry.changedAt ? ` · ${new Date(entry.changedAt).toLocaleString()}` : ""}
-                        </small>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p>No status changes recorded.</p>
-                )}
+                {item.summary && <p>{item.summary}</p>}
+                {item.date && <small>{new Date(item.date).toLocaleString()}</small>}
               </li>
             ))}
           </ul>
         )}
+        <nav className="dashboard-projects__page-links" aria-label="View all dashboard categories">
+          <Link className="dashboard-projects__view-all" to="/projects">View all projects</Link>
+          <Link className="dashboard-projects__view-all" to="/disbursements">View all disbursements</Link>
+          <Link className="dashboard-projects__view-all" to="/requests">View all requests</Link>
+          {canViewProcurements && (
+            <Link className="dashboard-projects__view-all" to="/procurement">View all procurements</Link>
+          )}
+        </nav>
       </section>
-
-      <>
-        <section className="dashboard-projects" aria-labelledby="dashboard-disbursements-heading">
-          <div className="dashboard-projects__header">
-            <h2 id="dashboard-disbursements-heading">
-              {isStaff ? "My disbursement requests" : "Disbursements"}
-            </h2>
-            <Link className="dashboard-projects__view-all" to="/disbursements">View all</Link>
-          </div>
-          {disbursementsLoading && <Loading message="Loading disbursements..." />}
-          {!disbursementsLoading && disbursementsError && (
-            <p role="alert">{disbursementsError}</p>
-          )}
-          {!disbursementsLoading && !disbursementsError && disbursements.length === 0 && (
-            <p>{isStaff ? "You have not sent any disbursement requests." : "No disbursements found."}</p>
-          )}
-          {!disbursementsLoading && !disbursementsError && disbursements.length > 0 && (
-            <ul className="dashboard-projects__list">
-              {disbursements.slice(0, 4).map((disbursement) => (
-                <li key={disbursement.id} className="dashboard-projects__item">
-                  <div className="dashboard-projects__title">
-                    <strong>{disbursement.recipient}</strong>
-                    <span>{disbursement.approvalStatus || disbursement.status}</span>
-                  </div>
-                  <p>{disbursement.reference} · {disbursement.amount}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="dashboard-projects" aria-labelledby="dashboard-requests-heading">
-          <div className="dashboard-projects__header">
-            <h2 id="dashboard-requests-heading">{isStaff ? "My requests" : "Requests"}</h2>
-            <Link className="dashboard-projects__view-all" to="/requests">View all</Link>
-          </div>
-          {requestsLoading && <Loading message="Loading requests..." />}
-          {!requestsLoading && requestsError && <p role="alert">{requestsError}</p>}
-          {!requestsLoading && !requestsError && requests.length === 0 && (
-            <p>{isStaff ? "You have not sent any requests." : "No requests found."}</p>
-          )}
-          {!requestsLoading && !requestsError && requests.length > 0 && (
-            <ul className="dashboard-projects__list">
-              {requests.slice(0, 4).map((request) => (
-                <li key={request.id} className="dashboard-projects__item">
-                  <div className="dashboard-projects__title">
-                    <strong>{request.itemName}</strong>
-                    <span>{request.status}</span>
-                  </div>
-                  <p>{request.reason}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {canViewProcurements && (
-          <section className="dashboard-projects" aria-labelledby="dashboard-procurements-heading">
-            <div className="dashboard-projects__header">
-              <h2 id="dashboard-procurements-heading">Procurements</h2>
-              <Link className="dashboard-projects__view-all" to="/procurement">View all</Link>
-            </div>
-            {procurementsLoading && <Loading message="Loading procurements..." />}
-            {!procurementsLoading && procurementsError && <p role="alert">{procurementsError}</p>}
-            {!procurementsLoading && !procurementsError && procurements.length === 0 && (
-              <p>No procurements found.</p>
-            )}
-            {!procurementsLoading && !procurementsError && procurements.length > 0 && (
-              <ul className="dashboard-projects__list">
-                {[...procurements]
-                  .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
-                  .slice(0, 4)
-                  .map((procurement) => (
-                  <li key={procurement.id} className="dashboard-projects__item">
-                    <div className="dashboard-projects__title">
-                      <strong>{procurement.itemName}</strong>
-                      <span>{procurement.status.replaceAll("_", " ")}</span>
-                    </div>
-                    <p>
-                      {procurement.quantity} × {procurement.itemType}
-                      {procurement.estimatedCost != null
-                        ? ` · KES ${Number(procurement.estimatedCost).toLocaleString()}`
-                        : ""}
-                    </p>
-                  </li>
-                  ))}
-              </ul>
-            )}
-          </section>
-        )}
-      </>
     </div>
   );
 }
