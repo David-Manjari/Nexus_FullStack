@@ -15,7 +15,7 @@ const formatKes = (value) => (value ? `KES ${Number(value).toLocaleString()}` : 
 
 export default function ProcurementQueue() {
   const { user } = useAuth();
-  const canCreate = user?.role === "manager";
+  const canManage = user?.role === "manager";
   const [procurements, setProcurements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -79,14 +79,14 @@ export default function ProcurementQueue() {
     <section className="rq-page">
       <header className="rq-header">
         <h2>Procurement queue</h2>
-        {canCreate && <Link className="rq-btn" to="/procurement/new">New procurement</Link>}
+        {canManage && <Link className="rq-btn" to="/procurement/new">New procurement</Link>}
       </header>
 
       {actionError && <div className="rq-banner rq-banner--error">{actionError}</div>}
 
       {procurements.length === 0 ? (
         <EmptyState text="No procurement requests yet.">
-          <Link className="rq-btn" to="/procurement/new">Create one</Link>
+          {canManage && <Link className="rq-btn" to="/procurement/new">Create one</Link>}
         </EmptyState>
       ) : (
         <ul className="rq-list">
@@ -106,7 +106,7 @@ export default function ProcurementQueue() {
                 </div>
                 {procurement.notes && <p className="rq-reason">{procurement.notes}</p>}
 
-                {procurement.status === "draft" && (
+                {canManage && procurement.status === "draft" && (
                   <div className="rq-actions">
                     <Link className="rq-btn rq-btn--ghost" to={`/procurement/new?edit=${procurement.id}`}>
                       {incomplete ? "Add cost & supplier" : "Edit"}
@@ -122,7 +122,7 @@ export default function ProcurementQueue() {
                   </div>
                 )}
 
-                {procurement.status === "approved" && !procurement.disbursementId && (
+                {canManage && procurement.status === "approved" && !procurement.disbursementId && (
                   <div className="rq-actions">
                     <button
                       className="rq-btn"
@@ -148,7 +148,7 @@ export default function ProcurementQueue() {
                   </p>
                 )}
 
-                {disbursementFormId === procurement.id && (
+                {canManage && disbursementFormId === procurement.id && (
                   <form
                     className="rq-form"
                     onSubmit={(event) => submitDisbursement(event, procurement)}
