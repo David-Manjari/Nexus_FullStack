@@ -15,6 +15,7 @@ function Disbursements() {
   const [busyId, setBusyId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("All");
   const [form, setForm] = useState({
     payee: "",
     recipientPhone: "",
@@ -97,15 +98,22 @@ function Disbursements() {
     }
   }
 
-  const pending = payouts.filter(
+  const filteredPayouts = statusFilter === "All"
+    ? payouts
+    : payouts.filter((payout) => payout.status === statusFilter);
+  const pending = filteredPayouts.filter(
     (payout) => payout.status === "Pending"
   );
 
-  const completed = payouts.filter(
+  const processing = filteredPayouts.filter(
+    (payout) => payout.status === "Processing"
+  );
+
+  const completed = filteredPayouts.filter(
     (payout) => payout.status === "Paid"
   );
 
-  const failed = payouts.filter(
+  const failed = filteredPayouts.filter(
     (payout) => payout.status === "Failed"
   );
 
@@ -230,17 +238,49 @@ function Disbursements() {
 
       {!loading && !error && isStaff && payouts.length > 0 && (
         <section className="disbursements-section">
-          <h2>My requests</h2>
-          <div className="payout-list">{payouts.map(renderPayout)}</div>
+          <div className="payout-section-heading">
+            <h2>My requests</h2>
+            <label className="payout-status-filter">
+              <span>Filter by status</span>
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="All">All statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Processing">Processing</option>
+                <option value="Paid">Paid</option>
+                <option value="Failed">Failed</option>
+              </select>
+            </label>
+          </div>
+          <div className="payout-list">
+            {filteredPayouts.length === 0
+              ? <p>No {statusFilter.toLowerCase()} disbursements.</p>
+              : filteredPayouts.map(renderPayout)}
+          </div>
         </section>
       )}
 
       {!loading && !error && !isStaff && <>
       <section className="disbursements-section">
-        <h2>Pending Payouts</h2>
+        <div className="payout-section-heading">
+          <h2>Pending Payouts</h2>
+          <label className="payout-status-filter">
+            <span>Filter by status</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="All">All statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Processing">Processing</option>
+              <option value="Paid">Paid</option>
+              <option value="Failed">Failed</option>
+            </select>
+          </label>
+        </div>
 
         <div className="payout-list">
-          {pending.length === 0 ? <p>No pending payouts.</p> : pending.map(renderPayout)}
+          {pending.length === 0 && processing.length === 0
+            ? <p>{statusFilter === "All"
+              ? "No pending or processing payouts."
+              : `No pending or processing payouts match the ${statusFilter.toLowerCase()} filter.`}</p>
+            : [...pending, ...processing].map(renderPayout)}
         </div>
       </section>
 
@@ -249,7 +289,9 @@ function Disbursements() {
 
         <div className="payout-list">
           {completed.length === 0 && failed.length === 0 ? (
-            <p>No completed or failed payouts.</p>
+            <p>{statusFilter === "All"
+              ? "No completed or failed payouts."
+              : `No completed or failed payouts match the ${statusFilter.toLowerCase()} filter.`}</p>
           ) : (
             [...completed, ...failed].map(renderPayout)
           )}
