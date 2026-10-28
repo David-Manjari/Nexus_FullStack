@@ -44,6 +44,11 @@ export async function getProjects() {
   return projects.map(mapProject);
 }
 
+export async function getAssignedProjects() {
+  const { projects } = await apiRequest("/projects/assigned");
+  return projects.map(mapProject);
+}
+
 export async function getProjectDetails(projectId) {
   const {
     project,

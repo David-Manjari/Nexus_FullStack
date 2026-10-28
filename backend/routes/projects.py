@@ -47,6 +47,15 @@ def projects_list():
 	)
 
 
+@projects_bp.get("/assigned")
+@roles_required("staff")
+def projects_assigned():
+	return _run(
+		lambda: list_projects(session["user_id"], session["role"], assigned_only=True),
+		success_key="projects",
+	)
+
+
 @projects_bp.post("")
 @roles_required(*PROJECT_ROLES)
 def projects_create():
