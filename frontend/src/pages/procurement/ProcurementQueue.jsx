@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { escalateProcurement, getProcurements } from "../../api/procurement";
+import {
+  createProcurementDisbursement,
+  escalateProcurement,
+  getProcurements,
+} from "../../api/procurement";
 import { EmptyState, ErrorState, LoadingState } from "../requests/ModuleStates";
 import RequestTimeline from "../requests/RequestTimeline";
 import StatusPill from "../requests/StatusPill";
@@ -18,6 +22,7 @@ export default function ProcurementQueue() {
   const [actionError, setActionError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [disbursementFormId, setDisbursementFormId] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -43,6 +48,25 @@ export default function ProcurementQueue() {
       await load();
     } catch (err) {
       setActionError(err.message || "Could not send this request.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function submitDisbursement(event, procurement) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    setBusyId(procurement.id);
+    setActionError("");
+    try {
+      await createProcurementDisbursement(
+        procurement.id,
+        formData.get("recipientPhone"),
+      );
+      setDisbursementFormId(null);
+      await load();
+    } catch (err) {
+      setActionError(err.message || "Could not create the disbursement request.");
     } finally {
       setBusyId(null);
     }
@@ -96,6 +120,68 @@ export default function ProcurementQueue() {
                       Send to approver
                     </button>
                   </div>
+                )}
+
+                {procurement.status === "approved" && !procurement.disbursementId && (
+                  <div className="rq-actions">
+                    <button
+                      className="rq-btn"
+                      type="button"
+                      onClick={() => setDisbursementFormId(
+                        disbursementFormId === procurement.id ? null : procurement.id,
+                      )}
+                    >
+                      {disbursementFormId === procurement.id
+                        ? "Cancel disbursement request"
+                        : "Create disbursement request"}
+                    </button>
+                  </div>
+                )}
+
+                {procurement.disbursementId && (
+                  <p className="rq-meta" role="status">
+                    Disbursement request: {procurement.disbursementApprovalStatus === "pending"
+                      ? "awaiting approval"
+                      : procurement.disbursementApprovalStatus === "rejected"
+                        ? "rejected"
+                        : procurement.disbursementStatus}
+                  </p>
+                )}
+
+                {disbursementFormId === procurement.id && (
+                  <form
+                    className="rq-form"
+                    onSubmit={(event) => submitDisbursement(event, procurement)}
+                  >
+                    <p className="rq-meta">
+                      This request will be sent to {procurement.createdBy} for approval.
+                    </p>
+                    <label className="rq-field">
+                      <span className="rq-label">Approved amount (KES)</span>
+                      <input
+                        type="text"
+                        value={Number(procurement.estimatedCost).toLocaleString()}
+                        readOnly
+                        aria-readonly="true"
+                      />
+                    </label>
+                    <label className="rq-field">
+                      <span className="rq-label">Supplier mobile number</span>
+                      <input
+                        name="recipientPhone"
+                        type="tel"
+                        required
+                        placeholder="07XXXXXXXX"
+                      />
+                    </label>
+                    <button
+                      className="rq-btn"
+                      type="submit"
+                      disabled={busyId === procurement.id}
+                    >
+                      {busyId === procurement.id ? "Creating..." : "Send for disbursement approval"}
+                    </button>
+                  </form>
                 )}
 
                 <button

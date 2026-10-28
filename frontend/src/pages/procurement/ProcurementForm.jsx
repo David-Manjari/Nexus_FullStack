@@ -104,6 +104,7 @@ export default function ProcurementForm() {
           <label className="rq-field">
             <span className="rq-label">Item</span>
             <input value={form.itemName} onChange={(e) => update("itemName", e.target.value)} />
+            <small className="rq-hint">Enter any item, including items not currently in inventory.</small>
             {errors.itemName && <small className="rq-error">{errors.itemName}</small>}
           </label>
           <label className="rq-field">

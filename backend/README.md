@@ -60,6 +60,7 @@ The disbursement blueprint uses the `/api` prefix. Other routes do not. Route-le
 | GET | `/procurements` | List procurements; supports a `status` filter |
 | GET | `/procurements/<int:procurement_id>` | Get a procurement |
 | POST | `/procurements` | Create a procurement draft |
+| POST | `/procurements/<int:procurement_id>/disbursement` | Create a disbursement approval request for an approved procurement |
 | PATCH | `/procurements/<int:procurement_id>` | Update a draft or advance its workflow |
 | GET | `/projects` | List visible projects |
 | POST | `/projects` | Create a project |
@@ -72,15 +73,15 @@ The disbursement blueprint uses the `/api` prefix. Other routes do not. Route-le
 | PATCH | `/projects/<int:project_id>/status` | Update project status |
 | POST | `/projects/<int:project_id>/milestones` | Add a project milestone (admin, manager, or assigned project manager) |
 | PATCH | `/projects/<int:project_id>/milestones/<int:milestone_id>` | Update milestone progress (admin, manager, or assigned project manager) |
-| GET | `/api/disbursements` | List disbursements; supports a `status` filter |
-| GET | `/api/disbursements/summary` | Get disbursement totals by status |
-| POST | `/api/disbursements` | Create a disbursement |
-| GET | `/api/disbursements/<int:disbursement_id>` | Get a disbursement |
-| POST | `/api/disbursements/<int:disbursement_id>/process` | Submit an approved payout to Daraja B2C sandbox |
+| GET | `/api/disbursements` | Admin/manager: list all; staff: list only their own requests; supports a `status` filter |
+| GET | `/api/disbursements/summary` | Get disbursement totals by status, scoped to the signed-in staff member when applicable |
+| POST | `/api/disbursements` | Create a disbursement request (admin, manager, or staff) |
+| GET | `/api/disbursements/<int:disbursement_id>` | Get a disbursement; staff can access only their own requests |
+| POST | `/api/disbursements/<int:disbursement_id>/process` | Submit an approved payout to Daraja B2C sandbox (admin/manager only) |
 | POST | `/api/daraja/b2c/result/<token>` | Receive a Daraja result callback |
 | POST | `/api/daraja/b2c/timeout/<token>` | Receive a Daraja timeout callback |
-| GET | `/api/disbursements/<int:disbursement_id>/history` | Get payment and audit history |
-| GET | `/api/payment-history` | List payment history |
+| GET | `/api/disbursements/<int:disbursement_id>/history` | Get payment and audit history; staff can access only their own requests |
+| GET | `/api/payment-history` | List payment history (admin/manager only) |
 
 For request and procurement payload details and workflow behavior, see [docs/api-requests-procurement.md](docs/api-requests-procurement.md).
 
@@ -123,7 +124,8 @@ The B2C client uses only `https://sandbox.safaricom.co.ke`. Sandbox test values 
 | `POST /assignments/<int:assignment_id>/return` | `return_condition`, `send_to_maintenance` |
 | `POST /requests` | `request_type`, `reason` (required); `item_name`, `asset_id`, `asset_type`, `category`, `quantity` (defaults to `1`), `amount`, `needed_by`, `project_id`. Asset requests need `item_name` or `asset_id`; disbursement requests need `amount` |
 | `PATCH /requests/<int:request_id>/fulfil` | `asset_id` (optional; uses the request's asset when omitted) |
-| `POST /procurements` | `item_name`, `asset_type`, `category`, `quantity`, `estimated_cost`, `supplier`, `reason`, `request_id`; `item_name` is required unless `request_id` is supplied |
+| `POST /procurements` | `item_name`, `asset_type`, `category`, `quantity`, `estimated_cost`, `supplier`, `reason`, `request_id`; `item_name` is required unless `request_id` is supplied. Direct requests can name items that are not yet in inventory. |
+| `POST /procurements/<int:procurement_id>/disbursement` | `recipient_phone`; amount is taken from the approved procurement and cannot be supplied by the caller |
 | `PATCH /procurements/<int:procurement_id>` | `item_name`, `asset_type`, `category`, `quantity`, `estimated_cost`, `supplier`, `reason`, `action` (`submit`, `cancel`, or `purchased`); provide at least one field or `action` |
 | `POST /projects` | `name` (required); `description`, `start_date`, `end_date` |
 | `PATCH /projects/<int:project_id>` | `name`, `description`, `start_date`, `end_date` (at least one required) |

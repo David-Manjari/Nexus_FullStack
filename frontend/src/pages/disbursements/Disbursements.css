@@ -173,6 +173,13 @@
   font-weight: 600;
 }
 
+.payout-approval-status {
+  margin: -8px 0 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
 @media (max-width: 640px) {
   .payout-main,
   .payout-details {

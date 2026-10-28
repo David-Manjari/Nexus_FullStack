@@ -8,7 +8,7 @@ export const PAGE_LINKS = [
     { id: 'requests', label: 'Requests', roles: ['admin', 'manager', 'staff'] },
     { id: 'procurement', label: 'Procurement', roles: ['manager'] },
     { id: 'approvals', label: 'Approvals', roles: ['admin', 'manager'] },
-    { id: 'disbursements', label: 'Disbursements', roles: ['admin', 'manager'] },
+    { id: 'disbursements', label: 'Disbursements', roles: ['admin', 'manager', 'staff'] },
     { id: 'projects', label: 'Projects', roles: ['admin', 'manager', 'staff'] },
     { id: 'notifications', label: 'Notifications', roles: ['admin', 'manager', 'staff'] },
     { id: 'admin', label: 'Admin', roles: ['admin'] },

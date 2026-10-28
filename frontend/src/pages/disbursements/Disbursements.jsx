@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { createDisbursement, getDisbursements, processDisbursement } from "../../api/disbursements";
+import { useAuth } from "../../auth/AuthContext";
 import Loading from "../../components/Loading";
 import ErrorMessage from "../../components/ErrorMessage";
 import EmptyState from "../../components/EmptyState";
 import "./Disbursements.css";
 
 function Disbursements() {
+  const { user } = useAuth();
+  const isStaff = user?.role === "staff";
   const [payouts, setPayouts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -107,7 +110,21 @@ function Disbursements() {
   );
 
   const renderPayout = (payout) => {
-    const statusClass = payout.status.toLowerCase().replace(/\s+/g, "-");
+    let displayStatus = payout.status;
+    let statusClass = payout.status.toLowerCase().replace(/\s+/g, "-");
+    if (payout.approvalStatus === "pending") {
+      displayStatus = "Awaiting approval";
+      statusClass = "pending";
+    } else if (payout.approvalStatus === "rejected") {
+      displayStatus = "Request declined";
+      statusClass = "failed";
+    } else if (
+      payout.approvalStatus === "approved"
+      && payout.status === "Pending"
+    ) {
+      displayStatus = "Approved - awaiting payment";
+      statusClass = "pending";
+    }
 
     return (
       <div className="payout-card" key={payout.id}>
@@ -118,8 +135,17 @@ function Disbursements() {
             {payout.recipientPhone && <p>Mobile: {payout.recipientPhone}</p>}
           </div>
 
-          <strong className={`payout-status ${statusClass}`}>{payout.status}</strong>
+          <strong className={`payout-status ${statusClass}`}>{displayStatus}</strong>
         </div>
+
+        {payout.approvalStatus && (
+          <p className="payout-approval-status">
+            Approval: {payout.approvalStatus}
+          </p>
+        )}
+        {isStaff && payout.approvalStatus === "rejected" && payout.approvalReason && (
+          <p className="payout-approval-status">{payout.approvalReason}</p>
+        )}
 
         <div className="payout-details">
           <div>
@@ -134,7 +160,7 @@ function Disbursements() {
         </div>
 
         <div className="payout-actions">
-          {payout.status === "Pending" && (
+          {!isStaff && payout.status === "Pending" && payout.approvalStatus === "approved" && (
             <button type="button" disabled={busyId === payout.id} onClick={() => runPayment(payout.id)}>
               {busyId === payout.id ? "Submitting..." : "Pay"}
             </button>
@@ -153,8 +179,12 @@ function Disbursements() {
   return (
     <div className="disbursements-page">
       <header className="disbursements-header">
-        <h1>Disbursements</h1>
-        <p>Sandbox only: no production payouts are sent.</p>
+        <h1>{isStaff ? "My Disbursement Requests" : "Disbursements"}</h1>
+        <p>
+          {isStaff
+            ? "Submit requests and follow their approval and payment progress."
+            : "Sandbox only: no production payouts are sent."}
+        </p>
         <button
           className="disbursement-form-toggle"
           type="button"
@@ -190,10 +220,22 @@ function Disbursements() {
       {error && <ErrorMessage message={error} onRetry={load} />}
       {loading && <Loading message="Loading disbursements..." />}
       {!loading && !error && payouts.length === 0 && (
-        <EmptyState title="No disbursements" message="Disbursements created in the backend will appear here." />
+        <EmptyState
+          title={isStaff ? "No disbursement requests" : "No disbursements"}
+          message={isStaff
+            ? "Requests you submit will appear here so you can follow their progress."
+            : "Disbursements created in the backend will appear here."}
+        />
       )}
 
-      {!loading && !error && <>
+      {!loading && !error && isStaff && payouts.length > 0 && (
+        <section className="disbursements-section">
+          <h2>My requests</h2>
+          <div className="payout-list">{payouts.map(renderPayout)}</div>
+        </section>
+      )}
+
+      {!loading && !error && !isStaff && <>
       <section className="disbursements-section">
         <h2>Pending Payouts</h2>
 

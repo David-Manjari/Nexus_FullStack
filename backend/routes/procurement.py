@@ -1,11 +1,12 @@
-"""Procurement routes: buying items the store does not have.
+"""Procurement routes: buying items the store needs.
 
 Only managers can see or use these endpoints: the server checks the role on
 every call, whatever the page shows. A procurement
 starts as a draft (often created automatically from an unavailable asset
-request), is filled in, then submitted for approval. Items must already exist
-in the inventory (T11). Every response includes the procurement's history (the
-status timeline), and every action is written to the audit log (T20).
+request), is filled in, then submitted for approval. Direct procurement
+requests can be created for items that are not in the inventory. Every response
+includes the procurement's history (the status timeline), and every action is
+written to the audit log (T20).
 
 Errors: 401 not signed in, 403 wrong role, 404 not found, 409 not allowed in
 the current state, 422 validation failed.
@@ -15,6 +16,8 @@ Register in app.py:
 """
 
 from decimal import Decimal, InvalidOperation
+import re
+import uuid
 
 import psycopg
 from flask import Blueprint, jsonify, request, session
@@ -22,6 +25,7 @@ from flask import Blueprint, jsonify, request, session
 from ..auth import roles_required
 from ..db import connect_database
 from ..services.approvals import create_approval
+from ..services.audit import record_audit
 from ..services.request_workflow import (
     attach_history,
     convert_to_procurement,
@@ -55,10 +59,6 @@ MAX_COST = Decimal("9999999999.99")  # fits NUMERIC(12,2)
 MAX_QUANTITY = 1_000_000
 OPTIONAL_TEXT = ("category", "supplier", "reason")  # a blank value means "not given"
 TEXT_LIMITS = {"item_name": 150, "category": 100, "supplier": 150, "reason": 2000}
-NOT_IN_INVENTORY = (
-    "That item is not in the inventory. Procurement is only for items that exist there."
-)
-
 # action -> (statuses it can start from, status it moves to, history note, audit action)
 ACTIONS = {
     "submit": (("draft",), "pending_approval", "Sent to approver.", "procurement_submitted"),
@@ -69,9 +69,20 @@ ACTIONS = {
 PROCUREMENT_SELECT = f"""
 SELECT p.procurement_id, p.request_id, p.requested_by AS raised_by, u.username AS raised_by_name,
        p.item_name, p.asset_type, p.category, p.quantity, p.estimated_cost,
-       p.supplier, p.reason, p.status, p.created_at, p.updated_at
+       p.supplier, p.reason, p.status, p.created_at, p.updated_at,
+       d.disbursement_id, d.status AS disbursement_status,
+       da.status AS disbursement_approval_status
 FROM {PROCUREMENT} p
 JOIN {USERS} u ON u.user_id = p.requested_by
+LEFT JOIN "Disbursements" d ON d.procurement_id = p.procurement_id
+LEFT JOIN LATERAL (
+    SELECT a.status
+    FROM "Approval_Items" a
+    WHERE a.request_type = 'disbursement'
+      AND a.reference_id = d.disbursement_id
+    ORDER BY a.approval_id DESC
+    LIMIT 1
+) da ON TRUE
 """
 
 
@@ -112,6 +123,17 @@ def _cost(value):
     if not cost.is_finite() or cost < 0 or cost > MAX_COST:
         return None
     return cost.quantize(Decimal("0.01"))
+
+
+def _kenyan_phone(value):
+    if not isinstance(value, str):
+        return None
+    digits = re.sub(r"[\s()-]", "", value.strip())
+    if digits.startswith("+"):
+        digits = digits[1:]
+    if digits.startswith("0") and len(digits) == 10:
+        digits = "254" + digits[1:]
+    return digits if re.fullmatch(r"254[17]\d{8}", digits) else None
 
 
 def _clean_fields(data):
@@ -155,7 +177,7 @@ def _audit_details(fields):
 @procurement_bp.get("")
 @roles_required(*READ_ROLES)
 def list_procurements():
-    """List procurements, newest first. Optional ?status= filter."""
+    """List all procurements, ordered by status. Optional ?status= filter."""
     status = request.args.get("status")
     if status is not None and status not in PROCUREMENT_STATUSES:
         return _invalid("Unknown status filter.")
@@ -164,7 +186,7 @@ def list_procurements():
     with connect_database() as connection:
         rows = connection.execute(
             f"{PROCUREMENT_SELECT} {where} "
-            "ORDER BY p.created_at DESC, p.procurement_id DESC LIMIT 200",
+            "ORDER BY p.status",
             params,
         ).fetchall()
         attach_history(connection, "procurement", rows, "procurement_id")
@@ -203,12 +225,103 @@ def get_procurement(procurement_id):
     return jsonify(procurement=row), 200
 
 
+@procurement_bp.post("/<int:procurement_id>/disbursement")
+@roles_required(*WRITE_ROLES)
+def create_procurement_disbursement(procurement_id):
+    """Create a pending disbursement approval for an approved procurement."""
+    data = _payload()
+    phone = _kenyan_phone(data.get("recipient_phone"))
+    if phone is None:
+        return _invalid("A valid Kenyan mobile number is required.")
+
+    with connect_database() as connection:
+        procurement = connection.execute(
+            f"""SELECT procurement_id, requested_by, item_name, quantity,
+                       estimated_cost, supplier, status
+                FROM {PROCUREMENT}
+                WHERE procurement_id = %s
+                FOR UPDATE""",
+            (procurement_id,),
+        ).fetchone()
+        if procurement is None:
+            return _error("Procurement not found.", 404)
+        if procurement["status"] != "approved":
+            return _error("Only approved procurements can create a disbursement request.", 409)
+
+        existing = connection.execute(
+            '''SELECT d.disbursement_id, d.amount, d.status,
+                      a.status AS approval_status
+               FROM "Disbursements" d
+               LEFT JOIN LATERAL (
+                   SELECT status FROM "Approval_Items"
+                   WHERE request_type = 'disbursement'
+                     AND reference_id = d.disbursement_id
+                   ORDER BY approval_id DESC
+                   LIMIT 1
+               ) a ON TRUE
+               WHERE d.procurement_id = %s''',
+            (procurement_id,),
+        ).fetchone()
+        if existing is not None:
+            return jsonify(disbursement=dict(existing)), 200
+
+        amount = procurement["estimated_cost"]
+        if (
+            amount is None
+            or amount <= 0
+            or amount != amount.to_integral_value()
+            or amount > Decimal("70000")
+        ):
+            return _invalid(
+                "The approved amount must be a whole KES amount from 1 to 70,000."
+            )
+        if not procurement["supplier"]:
+            return _invalid("Add a supplier to the procurement before creating a disbursement.")
+
+        reference = f"PROC-{procurement_id}-{uuid.uuid4().hex[:8].upper()}"
+        disbursement = connection.execute(
+            '''INSERT INTO "Disbursements"
+                   (procurement_id, reference, payee, recipient_phone, amount,
+                    currency, description, provider)
+               VALUES (%s, %s, %s, %s, %s, 'KES', %s, 'daraja_b2c_sandbox')
+               RETURNING disbursement_id, amount, status''',
+            (
+                procurement_id,
+                reference,
+                procurement["supplier"],
+                phone,
+                amount,
+                f"Procurement #{procurement_id}: {procurement['quantity']} x "
+                f"{procurement['item_name']}.",
+            ),
+        ).fetchone()
+        record_audit(
+            disbursement["disbursement_id"],
+            "payout_created",
+            f"Created from approved procurement #{procurement_id}.",
+            user_id=session["user_id"],
+            connection=connection,
+        )
+        approval = create_approval(
+            connection,
+            "disbursement",
+            procurement["requested_by"],
+            f"Disbursement for procurement #{procurement_id}: "
+            f"KES {amount:,.2f} to {procurement['supplier']} ({reference})"[:500],
+            reference_id=disbursement["disbursement_id"],
+        )
+
+    response = dict(disbursement)
+    response["approval_status"] = approval["status"]
+    return jsonify(disbursement=response), 201
+
+
 @procurement_bp.post("")
 @roles_required(*WRITE_ROLES)
 def create_procurement():
     """Create a draft procurement, directly or from an unfulfilled asset request.
 
-    Body: item_name or asset_id (the item must exist in the inventory), asset_type,
+    Body: item_name or asset_id, asset_type,
     category, quantity, estimated_cost, supplier, reason, and optionally request_id.
     """
     data = _payload()
@@ -253,12 +366,13 @@ def create_procurement():
                 item_name = fields.get("item_name")
 
             item = find_inventory_item(connection, asset_id=asset_id, item_name=item_name)
-            if item is None:
-                return _invalid(NOT_IN_INVENTORY)
-            fields["item_name"] = item["name"]
-            fields.setdefault("asset_type", item["asset_type"])
-            if item["category"]:
-                fields.setdefault("category", item["category"])
+            if asset_id is not None and item is None:
+                return _invalid("The selected asset was not found in the inventory.")
+            if item is not None:
+                fields["item_name"] = item["name"]
+                fields.setdefault("asset_type", item["asset_type"])
+                if item["category"]:
+                    fields.setdefault("category", item["category"])
 
             if request_id is not None:
                 created = convert_to_procurement(
@@ -336,15 +450,14 @@ def update_procurement(procurement_id):
         if fields and current["status"] != "draft":
             return _error("Only draft procurements can be edited.", 409)
 
-        # Re-check the inventory only when the item is being changed, so a draft
-        # that was created from a request can still be completed (cost, supplier).
+        # If the new name matches inventory, keep the canonical name. A
+        # procurement draft may also name an item not yet in inventory.
         if "item_name" in fields and (
             fields["item_name"].strip().lower() != current["item_name"].strip().lower()
         ):
             item = find_inventory_item(connection, item_name=fields["item_name"])
-            if item is None:
-                return _invalid(NOT_IN_INVENTORY)
-            fields["item_name"] = item["name"]
+            if item is not None:
+                fields["item_name"] = item["name"]
 
         new_status = None
         note = None
@@ -386,7 +499,7 @@ def update_procurement(procurement_id):
                 {"from": current["status"], "to": new_status},
             )
         if action == "submit":
-            item = connection.execute(
+            saved = connection.execute(
                 f"SELECT item_name, quantity, estimated_cost FROM {PROCUREMENT} "
                 "WHERE procurement_id = %s",
                 (procurement_id,),
@@ -395,8 +508,8 @@ def update_procurement(procurement_id):
                 connection,
                 "equipment_procurement",
                 user_id,
-                f"Procurement #{procurement_id}: {item['quantity']} x {item['item_name']}, "
-                f"estimated KES {item['estimated_cost']:,.2f}"[:500],
+                f"Procurement #{procurement_id}: {saved['quantity']} x {saved['item_name']}, "
+                f"estimated KES {saved['estimated_cost']:,.2f}"[:500],
                 reference_id=procurement_id,
             )
         # TODO: notify the approver once notifications exist.
