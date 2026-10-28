@@ -257,44 +257,35 @@ function DashboardHome() {
         </span>
       </div>
 
-      <Link
-        to="/notifications"
-        style={{
-          display: "block",
-          width: "100%",
-          maxWidth: "320px",
-          background: "var(--color-primary-soft)",
-          color: "var(--color-primary)",
-          padding: "12px 16px",
-          borderRadius: "8px",
-          fontSize: "1rem",
-          fontWeight: 700,
-          textDecoration: "none",
-          boxSizing: "border-box",
-          border: "1px solid var(--color-border)",
-          cursor: "pointer",
-          lineHeight: 1.4,
-        }}
-      >
-        {unreadCount > 0 ? "Click here to view unread notifications" : "Click here to view notifications"}
-      </Link>
-
       <section className="dashboard-projects" aria-labelledby="dashboard-activity-heading">
         <div className="dashboard-projects__header">
           <h2 id="dashboard-activity-heading">Recent activity</h2>
-          <label className="dashboard-projects__filter">
-            Category
-            <select
-              value={activityCategory}
-              onChange={(event) => setActivityCategory(event.target.value)}
-            >
-              <option value="all">All categories</option>
-              <option value="projects">Projects</option>
-              <option value="disbursements">Disbursements</option>
-              <option value="requests">Requests</option>
-              {canViewProcurements && <option value="procurement">Procurements</option>}
-            </select>
-          </label>
+          <div className="dashboard-projects__controls">
+            <label className="dashboard-projects__filter">
+              Category
+              <select
+                value={activityCategory}
+                onChange={(event) => setActivityCategory(event.target.value)}
+              >
+                <option value="all">All categories</option>
+                <option value="projects">Projects</option>
+                <option value="disbursements">Disbursements</option>
+                <option value="requests">Requests</option>
+                {canViewProcurements && <option value="procurement">Procurements</option>}
+              </select>
+            </label>
+            <nav className="dashboard-projects__page-links" aria-label="View all dashboard categories">
+              <Link className="dashboard-projects__view-all" to="/projects">View all projects</Link>
+              <Link className="dashboard-projects__view-all" to="/disbursements">View all disbursements</Link>
+              <Link className="dashboard-projects__view-all" to="/requests">View all requests</Link>
+              {canViewProcurements && (
+                <Link className="dashboard-projects__view-all" to="/procurement">View all procurements</Link>
+              )}
+            </nav>
+            <Link className="dashboard-projects__view-all" to="/notifications">
+              {unreadCount > 0 ? "View notifications (" + unreadCount + ")" : "View notifications"}
+            </Link>
+          </div>
         </div>
         {activityLoading && <Loading message="Loading recent activity..." />}
         {!activityLoading && activityErrors.map((message) => (
@@ -324,14 +315,6 @@ function DashboardHome() {
             ))}
           </ul>
         )}
-        <nav className="dashboard-projects__page-links" aria-label="View all dashboard categories">
-          <Link className="dashboard-projects__view-all" to="/projects">View all projects</Link>
-          <Link className="dashboard-projects__view-all" to="/disbursements">View all disbursements</Link>
-          <Link className="dashboard-projects__view-all" to="/requests">View all requests</Link>
-          {canViewProcurements && (
-            <Link className="dashboard-projects__view-all" to="/procurement">View all procurements</Link>
-          )}
-        </nav>
       </section>
     </div>
   );
