@@ -35,6 +35,10 @@ function ProjectCard({ project, user, assignableUsers, assignableUsersLoading, o
   const [staffToAdd, setStaffToAdd] = useState("");
   const [activeForm, setActiveForm] = useState("");
   const [saving, setSaving] = useState(false);
+  const [projectApprovers, setProjectApprovers] = useState([]);
+  const [projectApproversLoading, setProjectApproversLoading] = useState(false);
+  const [projectApproverId, setProjectApproverId] = useState("");
+  const [projectApproversError, setProjectApproversError] = useState("");
 
   const isAssignedProjectManager = project.managerId === user?.id;
   const canChangeStatus = isAssignedProjectManager || ["admin", "manager"].includes(user?.role);
@@ -151,6 +155,47 @@ function ProjectCard({ project, user, assignableUsers, assignableUsersLoading, o
     }
   }
 
+  async function loadProjectApprovers() {
+    setProjectApproversLoading(true);
+    setProjectApproversError("");
+    try {
+      setProjectApprovers(await getProjectApprovers());
+    } catch (loadError) {
+      setProjectApproversError(loadError.message || "Could not load project approvers.");
+    } finally {
+      setProjectApproversLoading(false);
+    }
+  }
+
+  async function toggleSubmitApproval() {
+    if (activeForm === "approval") {
+      setActiveForm("");
+      setProjectApproversError("");
+      return;
+    }
+
+    setActiveForm("approval");
+    await loadProjectApprovers();
+  }
+
+  async function handleSubmitApproval(event) {
+    event.preventDefault();
+    if (!projectApproverId) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      await submitProject(project.id, [Number(projectApproverId)]);
+      setProjectApproverId("");
+      await refreshDetails();
+      setActiveForm("");
+    } catch (submitError) {
+      setError(submitError.message || "Could not submit project for approval.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <li className="project-item">
       <div className="project-item__summary">
@@ -172,6 +217,65 @@ function ProjectCard({ project, user, assignableUsers, assignableUsersLoading, o
 
       {expanded && (
         <div className="project-item__details">
+          {project.status === "draft" && (
+            <div className="project-submit-approval">
+              <button
+                type="button"
+                aria-expanded={activeForm === "approval"}
+                aria-controls={activeForm === "approval" ? `approval-form-${project.id}` : undefined}
+                onClick={toggleSubmitApproval}
+              >
+                {activeForm === "approval" ? "Cancel submission" : "Submit for approval"}
+              </button>
+              {activeForm === "approval" && (
+                <form
+                  id={`approval-form-${project.id}`}
+                  className="project-form project-form--approval"
+                  onSubmit={handleSubmitApproval}
+                >
+                  <h3>Submit project for approval</h3>
+                  {projectApproversError && (
+                    <ErrorMessage
+                      message={projectApproversError}
+                      onRetry={loadProjectApprovers}
+                    />
+                  )}
+                  {projectApproversLoading ? (
+                    <Loading message="Loading approvers..." />
+                  ) : !projectApproversError && (
+                    <>
+                      <label>
+                        Approver
+                        <select
+                          required
+                          value={projectApproverId}
+                          disabled={saving || projectApprovers.length === 0}
+                          onChange={(event) => setProjectApproverId(event.target.value)}
+                        >
+                          <option value="">
+                            {projectApprovers.length
+                              ? "Select an approver"
+                              : "No active approvers available"}
+                          </option>
+                          {projectApprovers.map((approver) => (
+                            <option key={approver.id} value={approver.id}>
+                              {approver.name} ({approver.role})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="submit"
+                        disabled={saving || !projectApproverId || projectApprovers.length === 0}
+                      >
+                        {saving ? "Submitting..." : "Submit for approval"}
+                      </button>
+                    </>
+                  )}
+                </form>
+              )}
+            </div>
+          )}
           {error && <ErrorMessage message={error} onRetry={loadDetails} />}
           {loadingDetails && <Loading message="Loading project details..." />}
           {details && (
