@@ -30,8 +30,9 @@ disbursements_bp = Blueprint(
 )
 
 VALID_STATUSES = {"pending", "processing", "success", "paid", "failed"}
-READ_ROLES = ("admin", "manager")
+READ_ROLES = ("admin", "manager", "staff")
 WRITE_ROLES = ("admin", "manager")
+CREATE_ROLES = ("admin", "manager", "staff")
 MAX_AMOUNT = Decimal("9999999999.99")
 MAX_B2C_AMOUNT = Decimal("70000")
 
@@ -74,6 +75,37 @@ def _public_disbursement(row):
     return result
 
 
+def _disbursement_select():
+    return '''SELECT d.*,
+                     (SELECT a.status
+                      FROM "Approval_Items" a
+                      WHERE a.request_type = 'disbursement'
+                        AND a.reference_id = d.disbursement_id
+                      ORDER BY a.approval_id DESC
+                      LIMIT 1) AS approval_status,
+                     (SELECT a.decision_reason
+                      FROM "Approval_Items" a
+                      WHERE a.request_type = 'disbursement'
+                        AND a.reference_id = d.disbursement_id
+                      ORDER BY a.approval_id DESC
+                      LIMIT 1) AS approval_reason
+              FROM "Disbursements" d'''
+
+
+def _requester_scope(role, user_id):
+    if role == "staff":
+        return (
+            '''EXISTS (
+                   SELECT 1 FROM "Approval_Items" a
+                   WHERE a.request_type = 'disbursement'
+                     AND a.reference_id = d.disbursement_id
+                     AND a.requested_by = %s
+               )''',
+            (user_id,),
+        )
+    return "TRUE", ()
+
+
 def _callback_is_authorized(token):
     configured = os.environ.get("DARAJA_CALLBACK_TOKEN", "")
     enabled = os.environ.get("DARAJA_B2C_ENABLED", "").lower() == "true"
@@ -91,27 +123,41 @@ def list_disbursements():
     if status and status not in VALID_STATUSES:
         return jsonify(error="Invalid payout status."), 422
 
-    query = 'SELECT * FROM "Disbursements"'
-    params = ()
+    conditions = []
+    params = []
     if status:
-        query += " WHERE status = %s"
-        params = (status,)
-    query += " ORDER BY created_at DESC, disbursement_id DESC"
+        conditions.append("d.status = %s")
+        params.append(status)
+    requester_scope, requester_params = _requester_scope(
+        session["role"], session["user_id"]
+    )
+    if requester_scope != "TRUE":
+        conditions.append(requester_scope)
+        params.extend(requester_params)
 
+    query = _disbursement_select()
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY d.created_at DESC, d.disbursement_id DESC"
     with connect_database() as connection:
-        rows = connection.execute(query, params).fetchall()
+        rows = connection.execute(query, tuple(params)).fetchall()
     return jsonify([_public_disbursement(row) for row in rows]), 200
 
 
 @disbursements_bp.get("/disbursements/summary")
 @roles_required(*READ_ROLES)
 def disbursement_summary():
+    requester_scope, requester_params = _requester_scope(
+        session["role"], session["user_id"]
+    )
     with connect_database() as connection:
         rows = connection.execute(
-            '''SELECT status, COUNT(*) AS count,
-                      COALESCE(SUM(amount), 0) AS total
-               FROM "Disbursements"
-               GROUP BY status'''
+            f'''SELECT d.status, COUNT(*) AS count,
+                       COALESCE(SUM(d.amount), 0) AS total
+                FROM "Disbursements" d
+                WHERE {requester_scope}
+                GROUP BY d.status''',
+            requester_params,
         ).fetchall()
 
     summary = {status: {"count": 0, "total": 0} for status in VALID_STATUSES}
@@ -121,7 +167,7 @@ def disbursement_summary():
 
 
 @disbursements_bp.post("/disbursements")
-@roles_required(*WRITE_ROLES)
+@roles_required(*CREATE_ROLES)
 def create_disbursement():
     data = _payload()
 
@@ -221,8 +267,8 @@ def create_disbursement():
                         error="A payout with this Idempotency-Key is still being created."
                     ), 409
                 existing_row = connection.execute(
-                    '''SELECT * FROM "Disbursements"
-                       WHERE disbursement_id = %s''',
+                    f'''{_disbursement_select()}
+                        WHERE d.disbursement_id = %s''',
                     (existing["disbursement_id"],),
                 ).fetchone()
                 if existing_row is None:
@@ -253,23 +299,29 @@ def create_disbursement():
             user_id=session["user_id"],
             connection=connection,
         )
-        create_approval(
+        approval = create_approval(
             connection,
             "disbursement",
             session["user_id"],
             f"Disbursement of {row['currency']} {row['amount']:,.2f} to {row['payee']} ({row['reference']})"[:500],
             reference_id=row["disbursement_id"],
         )
-    return jsonify(_public_disbursement(row)), 201
+    response_row = dict(row)
+    response_row["approval_status"] = approval["status"]
+    return jsonify(_public_disbursement(response_row)), 201
 
 
 @disbursements_bp.get("/disbursements/<int:disbursement_id>")
 @roles_required(*READ_ROLES)
 def get_disbursement(disbursement_id):
+    requester_scope, requester_params = _requester_scope(
+        session["role"], session["user_id"]
+    )
     with connect_database() as connection:
         row = connection.execute(
-            'SELECT * FROM "Disbursements" WHERE disbursement_id = %s',
-            (disbursement_id,),
+            f'''{_disbursement_select()}
+                WHERE d.disbursement_id = %s AND {requester_scope}''',
+            (disbursement_id, *requester_params),
         ).fetchone()
     if row is None:
         return jsonify(error="Disbursement not found."), 404
@@ -328,10 +380,14 @@ def daraja_b2c_timeout(token):
 @disbursements_bp.get("/disbursements/<int:disbursement_id>/history")
 @roles_required(*READ_ROLES)
 def disbursement_history(disbursement_id):
+    requester_scope, requester_params = _requester_scope(
+        session["role"], session["user_id"]
+    )
     with connect_database() as connection:
         exists = connection.execute(
-            'SELECT 1 FROM "Disbursements" WHERE disbursement_id = %s',
-            (disbursement_id,),
+            f'''SELECT 1 FROM "Disbursements" d
+                WHERE d.disbursement_id = %s AND {requester_scope}''',
+            (disbursement_id, *requester_params),
         ).fetchone()
         if exists is None:
             return jsonify(error="Disbursement not found."), 404
@@ -341,7 +397,7 @@ def disbursement_history(disbursement_id):
 
 
 @disbursements_bp.get("/payment-history")
-@roles_required(*READ_ROLES)
+@roles_required(*WRITE_ROLES)
 def payment_history():
     with connect_database() as connection:
         rows = connection.execute(

@@ -209,7 +209,7 @@ function AppRoutes() {
         <Route element={<Shell />}>
           <Route path="/dashboard" element={<DashboardHome />} />
           <Route path="/approvals" element={<RoleGuard allowedRoles={APPROVER_ROLES}><Approvals /></RoleGuard>} />
-          <Route path="/disbursements" element={<RoleGuard allowedRoles={APPROVER_ROLES}><Disbursements /></RoleGuard>} />
+          <Route path="/disbursements" element={<RoleGuard allowedRoles={ALL_ROLES}><Disbursements /></RoleGuard>} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/requests" element={<RoleGuard allowedRoles={ALL_ROLES}><MyRequests /></RoleGuard>} />
           <Route path="/requests/new" element={<RoleGuard allowedRoles={ALL_ROLES}><RequestForm /></RoleGuard>} />
