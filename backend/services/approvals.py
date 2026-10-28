@@ -7,6 +7,7 @@ call create_approval() inside their own transaction when they need a decision.
 from psycopg.types.json import Jsonb
 
 from .notifications import create_notification
+from .request_workflow import log_action, record_event
 
 APPROVALS = '"Approval_Items"'
 USERS = '"Users"'
@@ -73,14 +74,28 @@ def list_pending(connection, role):
         return []
     rows = connection.execute(
         f"""SELECT a.approval_id, a.request_type, a.reference_id, a.summary,
-                   a.requested_by, u.username AS requested_by_name, a.created_at
+                   a.requested_by, u.username AS requested_by_name, a.created_at,
+                   r.quantity, COALESCE(NULLIF(r.item_name, ''), asset.name) AS asset_name
             FROM {APPROVALS} a
             JOIN {USERS} u ON u.user_id = a.requested_by
+            LEFT JOIN "Requests" r
+              ON a.request_type = 'equipment_assignment'
+             AND r.request_id = a.reference_id
+            LEFT JOIN "Assets" asset ON asset.asset_id = r.asset_id
             WHERE a.status = 'pending' AND a.request_type = ANY(%s)
             ORDER BY a.created_at, a.approval_id""",
         (types,),
     ).fetchall()
-    return [dict(row) for row in rows]
+    approvals = []
+    for row in rows:
+        approval = dict(row)
+        if approval["request_type"] == "equipment_assignment" and approval["asset_name"]:
+            approval["summary"] = (
+                f"Request #{approval['reference_id']}: "
+                f"{approval['quantity']} x {approval['asset_name']}"
+            )
+        approvals.append(approval)
+    return approvals
 
 
 def decide(connection, approval_id, user_id, role, decision, reason=None):
@@ -125,13 +140,21 @@ def decide(connection, approval_id, user_id, role, decision, reason=None):
 
 def _after_decision(connection, approval):
     """Notify the requester when an approval is approved or rejected."""
+    request = None
     if approval["request_type"] == "equipment_procurement":
         _update_procurement_status(connection, approval)
+    elif approval["request_type"] == "equipment_assignment":
+        request = _update_asset_request_status(connection, approval)
 
     request_type = approval["request_type"].replace("_", " ")
     reference_id = approval["reference_id"]
-    reference = f" #{reference_id}" if reference_id is not None else ""
-    message = f"Your {request_type} request{reference} was {approval['status']}."
+    if request is not None:
+        reference = f" #{reference_id}" if reference_id is not None else ""
+        item = f" for {request['quantity']} x {request['item_name']}" if request["item_name"] else ""
+        message = f"Your asset request{reference}{item} was {approval['status']}."
+    else:
+        reference = f" #{reference_id}" if reference_id is not None else ""
+        message = f"Your {request_type} request{reference} was {approval['status']}."
     reason = approval["decision_reason"]
     if reason:
         message += f" Reason: {reason}"
@@ -143,9 +166,43 @@ def _after_decision(connection, approval):
     )
 
 
-def _update_procurement_status(connection, approval):
-    from .request_workflow import log_action, record_event
+def _update_asset_request_status(connection, approval):
+    request_id = approval["reference_id"]
+    request = connection.execute(
+        '''SELECT r.status, r.quantity,
+                  COALESCE(NULLIF(r.item_name, ''), asset.name) AS item_name
+           FROM "Requests" r
+           LEFT JOIN "Assets" asset ON asset.asset_id = r.asset_id
+           WHERE r.request_id = %s
+           FOR UPDATE OF r''',
+        (request_id,),
+    ).fetchone()
+    if request is None:
+        raise LookupError("Asset request not found.")
+    if request["status"] not in ("pending", "escalated"):
+        raise AlreadyDecided("This asset request is no longer awaiting approval.")
 
+    status = approval["status"]
+    item = f"{request['quantity']} x {request['item_name']}" if request["item_name"] else "asset request"
+    note = f"Asset request {status}: {item}."
+    if approval["decision_reason"]:
+        note += f" Reason: {approval['decision_reason']}"
+    connection.execute(
+        '''UPDATE "Requests"
+           SET status = %s, updated_at = NOW()
+           WHERE request_id = %s''',
+        (status, request_id),
+    )
+    record_event(connection, "request", request_id, status, note, approval["decided_by"])
+    log_action(
+        connection, approval["decided_by"], f"asset_request_{status}",
+        "request", request_id,
+        {"approval_id": approval["approval_id"], "reason": approval["decision_reason"]},
+    )
+    return request
+
+
+def _update_procurement_status(connection, approval):
     procurement_id = approval["reference_id"]
     procurement = connection.execute(
         '''SELECT status FROM "Procurements"

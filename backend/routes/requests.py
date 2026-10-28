@@ -180,11 +180,13 @@ def create_request():
     with connect_database() as connection:
         if asset_id is not None:
             asset = connection.execute(
-                f"SELECT asset_type FROM {ASSETS} WHERE asset_id = %s", (asset_id,)
+                f"SELECT name, asset_type FROM {ASSETS} WHERE asset_id = %s", (asset_id,)
             ).fetchone()
             if asset is None:
                 return _error("That asset does not exist.", 422)
             asset_type = asset_type or asset["asset_type"]
+        else:
+            asset = None
 
         created = connection.execute(
             f"""
@@ -207,7 +209,7 @@ def create_request():
         )
 
         procurement = None
-        label = item_name or f"asset #{asset_id}"
+        label = item_name or (asset["name"] if asset is not None else None) or f"asset #{asset_id}"
         if request_type == "asset":
             # Not in the store? Start a procurement draft automatically.
             stock = check_stock(
