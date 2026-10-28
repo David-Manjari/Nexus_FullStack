@@ -297,7 +297,7 @@ def list_requests():
     with connect_database() as connection:
         rows = connection.execute(
             f"{REQUEST_SELECT} WHERE {' AND '.join(conditions)} "
-            "ORDER BY r.created_at DESC, r.request_id DESC LIMIT 200",
+            "ORDER BY r.created_at DESC, r.request_id DESC",
             params,
         ).fetchall()
         attach_history(connection, "request", rows, "request_id")

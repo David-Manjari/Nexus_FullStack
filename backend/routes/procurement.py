@@ -41,7 +41,7 @@ REQUESTS = '"Requests"'
 USERS = '"Users"'
 DISBURSEMENTS = '"Disbursements"'
 
-READ_ROLES = ("manager",)
+READ_ROLES = ("admin", "manager")
 WRITE_ROLES = ("manager",)
 
 PROCUREMENT_STATUSES = {
