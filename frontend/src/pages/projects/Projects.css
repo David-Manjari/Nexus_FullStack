@@ -368,8 +368,9 @@
   font-size: 1.25rem;
 }
 
-.dashboard-projects__filter {
+.page-content .dashboard-projects__filter {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   font-weight: 600;
@@ -454,7 +455,7 @@
     flex-direction: column;
   }
 
-  .dashboard-projects__filter {
+  .page-content .dashboard-projects__filter {
     align-self: flex-end;
   }
 }
