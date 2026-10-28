@@ -98,24 +98,13 @@ function Disbursements() {
     }
   }
 
-  const filteredPayouts = statusFilter === "All"
-    ? payouts
-    : payouts.filter((payout) => payout.status === statusFilter);
-  const pending = filteredPayouts.filter(
-    (payout) => payout.status === "Pending"
-  );
-
-  const processing = filteredPayouts.filter(
-    (payout) => payout.status === "Processing"
-  );
-
-  const completed = filteredPayouts.filter(
-    (payout) => payout.status === "Paid"
-  );
-
-  const failed = filteredPayouts.filter(
-    (payout) => payout.status === "Failed"
-  );
+  const filteredPayouts = payouts
+    .filter((payout) => statusFilter === "All" || payout.status === statusFilter)
+    .sort((first, second) => Date.parse(second.updatedAt) - Date.parse(first.updatedAt));
+  const pendingCount = payouts.filter((payout) => payout.status === "Pending").length;
+  const processingCount = payouts.filter((payout) => payout.status === "Processing").length;
+  const paidCount = payouts.filter((payout) => payout.status === "Paid").length;
+  const failedCount = payouts.filter((payout) => payout.status === "Failed").length;
 
   const renderPayout = (payout) => {
     let displayStatus = payout.status;
@@ -218,10 +207,10 @@ function Disbursements() {
         <h2>Payout Queue</h2>
 
         <div className="payout-counts">
-          <span className="payout-count">Pending: {pending.length}</span>
-          <span className="payout-count">Processing: {payouts.filter((payout) => payout.status === "Processing").length}</span>
-          <span className="payout-count">Paid: {completed.length}</span>
-          <span className="payout-count">Failed: {failed.length}</span>
+          <span className="payout-count">Pending: {pendingCount}</span>
+          <span className="payout-count">Processing: {processingCount}</span>
+          <span className="payout-count">Paid: {paidCount}</span>
+          <span className="payout-count">Failed: {failedCount}</span>
         </div>
       </section>
 
@@ -236,12 +225,12 @@ function Disbursements() {
         />
       )}
 
-      {!loading && !error && isStaff && payouts.length > 0 && (
+      {!loading && !error && payouts.length > 0 && (
         <section className="disbursements-section">
           <div className="payout-section-heading">
-            <h2>My requests</h2>
+            <h2>{isStaff ? "My Disbursements" : "All Disbursements"}</h2>
             <label className="payout-status-filter">
-              <span>Filter by status</span>
+              <span>Filter by:</span>
               <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option value="All">All statuses</option>
                 <option value="Pending">Pending</option>
@@ -253,51 +242,11 @@ function Disbursements() {
           </div>
           <div className="payout-list">
             {filteredPayouts.length === 0
-              ? <p>No {statusFilter.toLowerCase()} disbursements.</p>
+              ? <p>No {statusFilter.toLowerCase()} disbursements found.</p>
               : filteredPayouts.map(renderPayout)}
           </div>
         </section>
       )}
-
-      {!loading && !error && !isStaff && <>
-      <section className="disbursements-section">
-        <div className="payout-section-heading">
-          <h2>Pending Payouts</h2>
-          <label className="payout-status-filter">
-            <span>Filter by status</span>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="All">All statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="Processing">Processing</option>
-              <option value="Paid">Paid</option>
-              <option value="Failed">Failed</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="payout-list">
-          {pending.length === 0 && processing.length === 0
-            ? <p>{statusFilter === "All"
-              ? "No pending or processing payouts."
-              : `No pending or processing payouts match the ${statusFilter.toLowerCase()} filter.`}</p>
-            : [...pending, ...processing].map(renderPayout)}
-        </div>
-      </section>
-
-      <section className="disbursements-section">
-        <h2>Completed / Failed</h2>
-
-        <div className="payout-list">
-          {completed.length === 0 && failed.length === 0 ? (
-            <p>{statusFilter === "All"
-              ? "No completed or failed payouts."
-              : `No completed or failed payouts match the ${statusFilter.toLowerCase()} filter.`}</p>
-          ) : (
-            [...completed, ...failed].map(renderPayout)
-          )}
-        </div>
-      </section>
-      </>}
     </div>
   );
 }
