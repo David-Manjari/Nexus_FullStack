@@ -230,7 +230,7 @@ function Disbursements() {
           <div className="payout-section-heading">
             <h2>{isStaff ? "My Disbursements" : "All Disbursements"}</h2>
             <label className="payout-status-filter">
-              <span>Filter by:</span>
+              <span>Status</span>
               <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option value="All">All statuses</option>
                 <option value="Pending">Pending</option>
