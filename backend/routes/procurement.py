@@ -55,10 +55,6 @@ MAX_COST = Decimal("9999999999.99")  # fits NUMERIC(12,2)
 MAX_QUANTITY = 1_000_000
 OPTIONAL_TEXT = ("category", "supplier", "reason")  # a blank value means "not given"
 TEXT_LIMITS = {"item_name": 150, "category": 100, "supplier": 150, "reason": 2000}
-NOT_IN_INVENTORY = (
-    "That item is not in the inventory. Procurement is only for items that exist there."
-)
-
 # action -> (statuses it can start from, status it moves to, history note, audit action)
 ACTIONS = {
     "submit": (("draft",), "pending_approval", "Sent to approver.", "procurement_submitted"),
@@ -253,12 +249,13 @@ def create_procurement():
                 item_name = fields.get("item_name")
 
             item = find_inventory_item(connection, asset_id=asset_id, item_name=item_name)
-            if item is None:
-                return _invalid(NOT_IN_INVENTORY)
-            fields["item_name"] = item["name"]
-            fields.setdefault("asset_type", item["asset_type"])
-            if item["category"]:
-                fields.setdefault("category", item["category"])
+            if asset_id is not None and item is None:
+                return _invalid("The selected asset was not found in the inventory.")
+            if item is not None:
+                fields["item_name"] = item["name"]
+                fields.setdefault("asset_type", item["asset_type"])
+                if item["category"]:
+                    fields.setdefault("category", item["category"])
 
             if request_id is not None:
                 created = convert_to_procurement(
@@ -336,15 +333,14 @@ def update_procurement(procurement_id):
         if fields and current["status"] != "draft":
             return _error("Only draft procurements can be edited.", 409)
 
-        # Re-check the inventory only when the item is being changed, so a draft
-        # that was created from a request can still be completed (cost, supplier).
+        # If the new name matches inventory, keep the canonical name. A
+        # procurement draft may also name an item not yet in inventory.
         if "item_name" in fields and (
             fields["item_name"].strip().lower() != current["item_name"].strip().lower()
         ):
             item = find_inventory_item(connection, item_name=fields["item_name"])
-            if item is None:
-                return _invalid(NOT_IN_INVENTORY)
-            fields["item_name"] = item["name"]
+            if item is not None:
+                fields["item_name"] = item["name"]
 
         new_status = None
         note = None
