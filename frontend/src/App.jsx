@@ -10,7 +10,9 @@ import {
 } from "react-router-dom";
 
 import { getUnreadCount } from "./api/notifications";
-import { getProjects } from "./api/projects";
+import { getAssignedProjects, getProjects } from "./api/projects";
+import { getDisbursements } from "./api/disbursements";
+import { getMyRequests } from "./api/requests";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import RoleGuard from "./auth/RoleGuard";
@@ -50,6 +52,13 @@ function DashboardHome() {
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState("");
+  const [disbursements, setDisbursements] = useState([]);
+  const [disbursementsLoading, setDisbursementsLoading] = useState(true);
+  const [disbursementsError, setDisbursementsError] = useState("");
+  const [requests, setRequests] = useState([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+  const [requestsError, setRequestsError] = useState("");
+  const isStaff = user?.role === "staff";
 
   useEffect(() => {
     if (!user) return;
@@ -72,9 +81,13 @@ function DashboardHome() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return undefined;
     let active = true;
+    setProjects([]);
+    setProjectsLoading(true);
+    setProjectsError("");
 
-    getProjects()
+    (isStaff ? getAssignedProjects() : getProjects())
       .then((data) => {
         if (active) setProjects(data);
       })
@@ -88,7 +101,52 @@ function DashboardHome() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!isStaff) {
+      setDisbursements([]);
+      setRequests([]);
+      setDisbursementsLoading(false);
+      setRequestsLoading(false);
+      return undefined;
+    }
+    let active = true;
+    setDisbursements([]);
+    setDisbursementsLoading(true);
+    setDisbursementsError("");
+    setRequests([]);
+    setRequestsLoading(true);
+    setRequestsError("");
+
+    getDisbursements()
+      .then((data) => {
+        if (active) setDisbursements(data);
+      })
+      .catch((loadError) => {
+        if (active) {
+          setDisbursementsError(loadError.message || "Could not load your disbursement requests.");
+        }
+      })
+      .finally(() => {
+        if (active) setDisbursementsLoading(false);
+      });
+
+    getMyRequests()
+      .then((data) => {
+        if (active) setRequests(data);
+      })
+      .catch((loadError) => {
+        if (active) setRequestsError(loadError.message || "Could not load your requests.");
+      })
+      .finally(() => {
+        if (active) setRequestsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isStaff, user?.id]);
 
   return (
     <div style={{ display: "grid", gap: "16px" }}>
@@ -135,13 +193,15 @@ function DashboardHome() {
 
       <section className="dashboard-projects" aria-labelledby="dashboard-projects-heading">
         <div className="dashboard-projects__header">
-          <h2 id="dashboard-projects-heading">Project status and audit</h2>
+          <h2 id="dashboard-projects-heading">
+            {isStaff ? "Projects you are assigned to" : "Project status and audit"}
+          </h2>
           <Link to="/projects">Projects</Link>
         </div>
         {projectsLoading && <Loading message="Loading project status..." />}
         {!projectsLoading && projectsError && <p role="alert">{projectsError}</p>}
         {!projectsLoading && !projectsError && projects.length === 0 && (
-          <p>No projects are assigned or available to you.</p>
+          <p>{isStaff ? "You are not assigned to any projects." : "No projects are available to you."}</p>
         )}
         {!projectsLoading && !projectsError && projects.length > 0 && (
           <ul className="dashboard-projects__list">
@@ -177,6 +237,62 @@ function DashboardHome() {
           </ul>
         )}
       </section>
+
+      {isStaff && (
+        <>
+          <section className="dashboard-projects" aria-labelledby="dashboard-disbursements-heading">
+            <div className="dashboard-projects__header">
+              <h2 id="dashboard-disbursements-heading">My disbursement requests</h2>
+              <Link to="/disbursements">View all</Link>
+            </div>
+            {disbursementsLoading && <Loading message="Loading your disbursement requests..." />}
+            {!disbursementsLoading && disbursementsError && (
+              <p role="alert">{disbursementsError}</p>
+            )}
+            {!disbursementsLoading && !disbursementsError && disbursements.length === 0 && (
+              <p>You have not sent any disbursement requests.</p>
+            )}
+            {!disbursementsLoading && !disbursementsError && disbursements.length > 0 && (
+              <ul className="dashboard-projects__list">
+                {disbursements.slice(0, 5).map((disbursement) => (
+                  <li key={disbursement.id} className="dashboard-projects__item">
+                    <div className="dashboard-projects__title">
+                      <strong>{disbursement.recipient}</strong>
+                      <span>{disbursement.approvalStatus || disbursement.status}</span>
+                    </div>
+                    <p>{disbursement.reference} · {disbursement.amount}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="dashboard-projects" aria-labelledby="dashboard-requests-heading">
+            <div className="dashboard-projects__header">
+              <h2 id="dashboard-requests-heading">My requests</h2>
+              <Link to="/requests">View all</Link>
+            </div>
+            {requestsLoading && <Loading message="Loading your requests..." />}
+            {!requestsLoading && requestsError && <p role="alert">{requestsError}</p>}
+            {!requestsLoading && !requestsError && requests.length === 0 && (
+              <p>You have not sent any requests.</p>
+            )}
+            {!requestsLoading && !requestsError && requests.length > 0 && (
+              <ul className="dashboard-projects__list">
+                {requests.slice(0, 5).map((request) => (
+                  <li key={request.id} className="dashboard-projects__item">
+                    <div className="dashboard-projects__title">
+                      <strong>{request.itemName}</strong>
+                      <span>{request.status}</span>
+                    </div>
+                    <p>{request.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }

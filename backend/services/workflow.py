@@ -103,7 +103,7 @@ def create_project(data, user_id):
 		return project
 
 
-def list_projects(user_id, role):
+def list_projects(user_id, role, assigned_only=False):
 	with connect_database() as connection:
 		query = '''SELECT p.*, creator.username AS created_by_name,
 					  manager.username AS manager_name,
@@ -127,7 +127,14 @@ def list_projects(user_id, role):
 			   LEFT JOIN "Users" manager ON manager.user_id = p.manager_id
 			   '''
 		params = ()
-		if role not in ("admin", "manager"):
+		if assigned_only:
+			query += ''' WHERE EXISTS (
+				 SELECT 1 FROM "Project_Staff_Assignments" assigned_staff
+				 WHERE assigned_staff.project_id = p.project_id
+				   AND assigned_staff.user_id = %s
+			 )'''
+			params = (user_id,)
+		elif role not in ("admin", "manager"):
 			query += ''' WHERE p.created_by = %s OR p.manager_id = %s
 				 OR EXISTS (
 					 SELECT 1 FROM "Project_Staff_Assignments" assigned_staff
