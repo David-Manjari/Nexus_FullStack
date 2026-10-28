@@ -194,7 +194,6 @@
   gap: 12px;
 }
 
-.project-submit-approval > button,
 .project-form--approval button {
   min-height: 38px;
   padding: 8px 12px;
@@ -206,12 +205,10 @@
   cursor: pointer;
 }
 
-.project-submit-approval > button:hover,
 .project-form--approval button:hover:not(:disabled) {
   background: var(--color-primary-hover);
 }
 
-.project-submit-approval > button:focus-visible,
 .project-form--approval button:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
