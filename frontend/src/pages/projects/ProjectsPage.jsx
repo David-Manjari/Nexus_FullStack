@@ -155,7 +155,7 @@ function ProjectCard({ project, user, assignableUsers, assignableUsersLoading, o
     <li className="project-item">
       <div className="project-item__summary">
         <div>
-          <h2>{project.name}</h2>
+          <div className="project-item_image-wrap"><img src={project.image || "/images/inventory.jpg"} alt={project.name} className="project-item_image" /><h2>{project.name}</h2></div>
           <p className="project-item__meta">
             Project manager: {project.managerName || "Unassigned"}
             <span className={`project-status project-status--${project.status}`}>
