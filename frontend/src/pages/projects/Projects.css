@@ -367,3 +367,18 @@
     flex-direction: column;
   }
 }
+
+/* Project images */
+.project-item__image-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.project-item__image {
+  width: 100px;
+  height: 75px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
